@@ -15,7 +15,6 @@ use iced::{Alignment, Element, Length, Task};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use std::process::{Child, Command};
 
 mod controller;
 use controller::ClashController;
@@ -35,6 +34,7 @@ fn main() -> iced::Result {
 struct ClashRuntime {
     is_running: Arc<Mutex<bool>>,
     controller: Arc<Mutex<Option<ClashController>>>,
+    #[allow(dead_code)]
     process_handle: Arc<Mutex<Option<u32>>>, // Store PID instead of Child
 }
 
@@ -74,6 +74,7 @@ struct ClashApp {
     selected_config: Option<ConfigFile>,
     config_path_input: String,
     clash_runtime: ClashRuntime,
+    proxy_info: String, // Display proxy information
 }
 
 #[derive(Debug, Clone)]
@@ -87,6 +88,8 @@ enum Message {
     AddConfigFile,
     ProxyStarted(Result<(), String>),
     ProxyStopped,
+    RefreshProxies,
+    ProxiesUpdated(Result<String, String>),
 }
 
 impl ClashApp {
@@ -110,6 +113,7 @@ impl ClashApp {
                 selected_config: Some(default_configs[0].clone()),
                 config_path_input: String::new(),
                 clash_runtime: ClashRuntime::default(),
+                proxy_info: String::new(),
             },
             Task::none(),
         )
@@ -156,6 +160,11 @@ impl ClashApp {
                 match result {
                     Ok(_) => {
                         self.status = String::from("Running");
+                        // Auto-refresh proxies when started
+                        let runtime = self.clash_runtime.clone();
+                        return Task::future(async move {
+                            refresh_proxies(runtime).await
+                        });
                     }
                     Err(e) => {
                         self.status = format!("Error: {}", e);
@@ -165,6 +174,24 @@ impl ClashApp {
             }
             Message::ProxyStopped => {
                 self.status = String::from("Stopped");
+                self.proxy_info.clear();
+                Task::none()
+            }
+            Message::RefreshProxies => {
+                let runtime = self.clash_runtime.clone();
+                Task::future(async move {
+                    refresh_proxies(runtime).await
+                })
+            }
+            Message::ProxiesUpdated(result) => {
+                match result {
+                    Ok(info) => {
+                        self.proxy_info = info;
+                    }
+                    Err(e) => {
+                        self.proxy_info = format!("Error: {}", e);
+                    }
+                }
                 Task::none()
             }
             Message::ConfigSelected(config) => {
@@ -252,7 +279,22 @@ impl ClashApp {
             .on_press(Message::StopProxy)
             .padding(10);
 
-        let controls = row![start_button, stop_button].spacing(10);
+        let refresh_button = button(text("Refresh").size(16))
+            .on_press(Message::RefreshProxies)
+            .padding(10);
+
+        let controls = row![start_button, stop_button, refresh_button].spacing(10);
+
+        // Proxy information display
+        let proxy_info_widget = if !self.proxy_info.is_empty() {
+            column![
+                Space::with_height(10.0),
+                text("Proxy Info:").size(14),
+                text(&self.proxy_info).size(12),
+            ]
+        } else {
+            column![]
+        };
 
         let content = column![
             title,
@@ -270,6 +312,7 @@ impl ClashApp {
             text("Port:").size(14),
             port_input,
             controls,
+            proxy_info_widget,
         ]
         .spacing(20)
         .padding(20)
@@ -297,7 +340,7 @@ async fn start_clash(config_path: String, runtime: ClashRuntime) -> Message {
     
     let result = tokio::task::spawn(async move {
         // Start clash in a background thread
-        let handle = tokio::task::spawn_blocking(move || {
+        let _handle = tokio::task::spawn_blocking(move || {
             // Use clash-lib to start the clash instance
             let opts = clash_lib::Options {
                 config: clash_lib::Config::File(config_path_clone),
@@ -356,5 +399,30 @@ async fn stop_clash(runtime: ClashRuntime) {
         // Call clash-lib shutdown
         clash_lib::shutdown();
         *is_running = false;
+    }
+}
+
+// Helper function to refresh proxy information
+async fn refresh_proxies(runtime: ClashRuntime) -> Message {
+    let controller = runtime.controller.lock().await;
+    
+    if let Some(ctrl) = controller.as_ref() {
+        match ctrl.get_proxies().await {
+            Ok(proxies) => {
+                let info = if proxies.is_empty() {
+                    "No proxies found".to_string()
+                } else {
+                    let proxy_names: Vec<String> = proxies
+                        .iter()
+                        .map(|p| format!("{} ({})", p.name, p.proxy_type))
+                        .collect();
+                    format!("Proxies: {}", proxy_names.join(", "))
+                };
+                Message::ProxiesUpdated(Ok(info))
+            }
+            Err(e) => Message::ProxiesUpdated(Err(e)),
+        }
+    } else {
+        Message::ProxiesUpdated(Err("Controller not initialized".to_string()))
     }
 }

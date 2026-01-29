@@ -39,6 +39,7 @@ pub struct Proxy {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct DelayResponse {
     pub delay: i32,
 }
@@ -73,6 +74,7 @@ struct ProxiesResponse {
 impl ClashController {
     /// Create a new controller that connects via Unix domain socket
     #[cfg(unix)]
+    #[allow(dead_code)]
     pub fn new_unix(socket_path: String) -> Self {
         Self {
             socket_path: Some(socket_path),
@@ -97,6 +99,7 @@ impl ClashController {
     }
 
     /// Select a proxy for a group
+    #[allow(dead_code)]
     pub async fn select_proxy(&self, group_name: String, proxy_name: String) -> Result<(), String> {
         let body = serde_json::json!({
             "name": proxy_name
@@ -109,6 +112,7 @@ impl ClashController {
     }
 
     /// Get active connections
+    #[allow(dead_code)]
     pub async fn get_connections(&self) -> Result<ConnectionsResponse, String> {
         self.request("GET", "/connections", None).await
             .map_err(|e| format!("Failed to get connections: {}", e))
@@ -121,6 +125,7 @@ impl ClashController {
     }
 
     /// Set proxy mode (rule, global, direct)
+    #[allow(dead_code)]
     pub async fn set_mode(&self, mode: Mode) -> Result<(), String> {
         let mode_str = match mode {
             Mode::Rule => "rule",
@@ -137,11 +142,13 @@ impl ClashController {
     }
 
     /// Get current proxy mode
+    #[allow(dead_code)]
     pub async fn get_mode(&self) -> Result<Option<Mode>, String> {
         let config = self.get_configs().await?;
         Ok(config.mode)
     }
 
+    #[allow(dead_code)]
     async fn request_no_response(
         &self,
         method: &str,
