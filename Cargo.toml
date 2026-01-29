@@ -1,0 +1,10 @@
+[package]
+name = "clash-iced"
+version = "0.1.0"
+edition = "2021"
+authors = ["Watfaq"]
+description = "A GUI for clash-rs built with iced"
+license = "MIT"
+
+[dependencies]
+iced = "0.13"
