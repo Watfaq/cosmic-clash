@@ -4,6 +4,30 @@ All notable changes to the clash-iced project will be documented in this file.
 
 ## [Unreleased]
 
+### Added - Clash Proxy Integration
+
+#### New Features
+- **Clash-lib Integration**: Integrated clash-lib from https://github.com/Watfaq/clash-rs as a git dependency
+- **Actual Proxy Functionality**: Start and stop buttons now actually start and stop Clash proxy instances
+- **Async Runtime Support**: Added Tokio async runtime for handling proxy operations
+- **Runtime State Tracking**: Track whether Clash is running or stopped
+- **Error Handling**: Display errors if Clash fails to start
+
+#### Technical Implementation
+- Added clash-lib as git dependency
+- Added tokio and tracing dependencies
+- Requires Rust nightly toolchain (configured via rust-toolchain.toml)
+- Uses `clash_lib::start_scaffold` to start Clash instances
+- Uses `clash_lib::shutdown` to stop running instances
+- Implements async message handling with iced's `Task::future`
+- Added `ClashRuntime` struct to track state
+- Added `ProxyStarted` and `ProxyStopped` messages
+
+#### Configuration
+- Requires protobuf-compiler for building
+- Added rust-toolchain.toml to specify nightly Rust
+- Updated .gitignore to exclude runtime files (cache.db, config files)
+
 ### Added - Config File Switching Feature
 
 #### New Features

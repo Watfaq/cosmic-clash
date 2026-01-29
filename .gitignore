@@ -24,3 +24,9 @@ target
 # Added by cargo
 
 /target
+
+# Clash runtime files
+cache.db
+config.yaml
+*.yaml
+*.yml

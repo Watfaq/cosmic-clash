@@ -11,16 +11,20 @@ clash-iced is a GUI application built with the iced framework for managing Clash
 1. **ClashApp** - The main application state
    - `proxy_url`: String - Stores the proxy URL configuration
    - `port`: String - Stores the port configuration (default: 7890)
-   - `status`: String - Current proxy status (Running/Stopped)
+   - `status`: String - Current proxy status (Running/Stopped/Starting/Stopping/Error)
    - `config_files`: Vec<ConfigFile> - List of available configuration files
    - `selected_config`: Option<ConfigFile> - Currently selected config file
    - `config_path_input`: String - Input field for adding new config paths
+   - `clash_runtime`: ClashRuntime - Tracks Clash instance state
 
-2. **ConfigFile** - Configuration file structure
+2. **ClashRuntime** - Runtime state wrapper
+   - `is_running`: Arc<Mutex<bool>> - Thread-safe flag indicating if Clash is running
+
+3. **ConfigFile** - Configuration file structure
    - `name`: String - Display name of the config file
    - `path`: String - File system path to the config file
 
-3. **Message** - Application messages/events
+4. **Message** - Application messages/events
    - `ProxyUrlChanged(String)` - Fired when proxy URL input changes
    - `PortChanged(String)` - Fired when port input changes
    - `StartProxy` - Fired when Start button is clicked
@@ -28,6 +32,8 @@ clash-iced is a GUI application built with the iced framework for managing Clash
    - `ConfigSelected(ConfigFile)` - Fired when a config file is selected from the dropdown
    - `ConfigPathChanged(String)` - Fired when the config path input changes
    - `AddConfigFile` - Fired when the Add Config button is clicked
+   - `ProxyStarted(Result<(), String>)` - Fired when Clash starts (success or error)
+   - `ProxyStopped` - Fired when Clash stops
 
 ### UI Layout
 
@@ -87,6 +93,21 @@ The application now supports switching between different Clash configuration fil
 4. **Pre-configured Options** - Includes Default, Home, and Custom config paths
 
 When a user selects a different config file from the dropdown, the application updates its state to reflect the new selection. The actual loading of config file contents would be implemented in the future proxy integration.
+
+### Clash Proxy Integration
+
+The application integrates with clash-lib (from https://github.com/Watfaq/clash-rs) to run actual Clash proxy instances:
+
+1. **clash-lib Dependency** - Uses clash-lib as a git dependency
+2. **Async Runtime** - Uses Tokio for async operations
+3. **Start/Stop Controls** - Actually starts and stops Clash proxy instances
+4. **Runtime State** - Tracks whether Clash is running
+
+**Implementation Details:**
+- `ClashRuntime` struct wraps the runtime state in an Arc<Mutex<bool>>
+- `start_clash` function uses `clash_lib::start_scaffold` to start Clash in a blocking task
+- `stop_clash` function calls `clash_lib::shutdown` to stop the running instance
+- Uses iced's `Task::future` for async message handling
 
 ## Future Enhancements
 
