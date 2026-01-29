@@ -7,6 +7,9 @@ A GUI client for clash-rs built with the iced framework in Rust.
 - Cross-platform GUI built with [iced](https://github.com/iced-rs/iced)
 - **Config file switching** - Select and switch between different Clash configuration files
 - **Clash proxy integration** - Uses clash-lib to run actual Clash proxy instances
+- **IPC Communication** - UI and clash-lib communicate via IPC (similar to clash-android)
+- **Proxy information display** - View proxy groups and nodes
+- **Real-time refresh** - Fetch latest proxy status via IPC
 - Proxy configuration interface
 - Start/Stop proxy controls
 - Port configuration
@@ -49,11 +52,13 @@ cargo run --release
 5. Click "Start Proxy" to enable the proxy
    - The application will start a Clash proxy instance using the selected config
    - Status will change to "Running" when successful
-6. Click "Stop Proxy" to disable the proxy
+   - Proxy information will automatically be fetched via IPC
+6. Click "Refresh" to update proxy information from the running instance
+7. Click "Stop Proxy" to disable the proxy
    - The Clash instance will be shut down
    - Status will change to "Stopped"
 
-**Note**: Make sure you have a valid Clash configuration file before starting the proxy.
+**Note**: The application uses IPC to communicate with the clash instance, similar to clash-android architecture.
 
 ## Development
 

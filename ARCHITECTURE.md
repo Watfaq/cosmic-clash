@@ -15,16 +15,24 @@ clash-iced is a GUI application built with the iced framework for managing Clash
    - `config_files`: Vec<ConfigFile> - List of available configuration files
    - `selected_config`: Option<ConfigFile> - Currently selected config file
    - `config_path_input`: String - Input field for adding new config paths
-   - `clash_runtime`: ClashRuntime - Tracks Clash instance state
+   - `clash_runtime`: ClashRuntime - Tracks Clash instance state and IPC controller
+   - `proxy_info`: String - Display proxy information fetched via IPC
 
 2. **ClashRuntime** - Runtime state wrapper
    - `is_running`: Arc<Mutex<bool>> - Thread-safe flag indicating if Clash is running
+   - `controller`: Arc<Mutex<Option<ClashController>>> - IPC controller for communication
+   - `process_handle`: Arc<Mutex<Option<u32>>> - Process ID of clash instance
 
-3. **ConfigFile** - Configuration file structure
+3. **ClashController** - IPC communication layer (in controller.rs module)
+   - HTTP/Unix socket client for clash API
+   - Methods: get_proxies, set_mode, get_connections, select_proxy, etc.
+   - Similar to clash-android controller implementation
+
+4. **ConfigFile** - Configuration file structure
    - `name`: String - Display name of the config file
    - `path`: String - File system path to the config file
 
-4. **Message** - Application messages/events
+5. **Message** - Application messages/events
    - `ProxyUrlChanged(String)` - Fired when proxy URL input changes
    - `PortChanged(String)` - Fired when port input changes
    - `StartProxy` - Fired when Start button is clicked
@@ -34,6 +42,8 @@ clash-iced is a GUI application built with the iced framework for managing Clash
    - `AddConfigFile` - Fired when the Add Config button is clicked
    - `ProxyStarted(Result<(), String>)` - Fired when Clash starts (success or error)
    - `ProxyStopped` - Fired when Clash stops
+   - `RefreshProxies` - Fired when Refresh button is clicked
+   - `ProxiesUpdated(Result<String, String>)` - Fired with proxy info from IPC
 
 ### UI Layout
 
@@ -80,6 +90,11 @@ clash-iced is a GUI application built with the iced framework for managing Clash
   - iced_widget - UI widgets (buttons, text inputs, pick lists, etc.)
   - iced_winit - Window creation and event handling
   - iced_wgpu - Hardware-accelerated rendering backend
+- **clash-lib** - Clash proxy core library from clash-rs
+- **tokio** - Async runtime for IPC operations
+- **hyper** / **hyper-util** - HTTP client for IPC communication
+- **hyperlocal** - Unix domain socket support for IPC (Unix platforms)
+- **serde** / **serde_json** - Serialization for IPC messages
 
 ## Key Features Implementation
 
@@ -92,22 +107,32 @@ The application now supports switching between different Clash configuration fil
 3. **Config Display** - Shows the full path of the currently selected config
 4. **Pre-configured Options** - Includes Default, Home, and Custom config paths
 
-When a user selects a different config file from the dropdown, the application updates its state to reflect the new selection. The actual loading of config file contents would be implemented in the future proxy integration.
+When a user selects a different config file from the dropdown, the application updates its state to reflect the new selection.
 
-### Clash Proxy Integration
+### Clash Proxy Integration with IPC
 
-The application integrates with clash-lib (from https://github.com/Watfaq/clash-rs) to run actual Clash proxy instances:
+The application integrates with clash-lib through IPC (Inter-Process Communication), similar to clash-android architecture:
 
-1. **clash-lib Dependency** - Uses clash-lib as a git dependency
-2. **Async Runtime** - Uses Tokio for async operations
-3. **Start/Stop Controls** - Actually starts and stops Clash proxy instances
-4. **Runtime State** - Tracks whether Clash is running
+1. **Separate Process Architecture** - Clash runs in a separate thread with HTTP controller enabled
+2. **IPC Controller** - ClashController module handles communication via HTTP/Unix socket
+3. **Async Communication** - All IPC calls are asynchronous, non-blocking
+4. **API Methods** - get_proxies, set_mode, get_connections, select_proxy, etc.
 
 **Implementation Details:**
-- `ClashRuntime` struct wraps the runtime state in an Arc<Mutex<bool>>
-- `start_clash` function uses `clash_lib::start_scaffold` to start Clash in a blocking task
-- `stop_clash` function calls `clash_lib::shutdown` to stop the running instance
-- Uses iced's `Task::future` for async message handling
+- `ClashController` struct wraps HTTP client for IPC
+- Supports both Unix domain sockets (Linux/macOS) and HTTP (all platforms)
+- `ClashRuntime` struct tracks controller instance and running state
+- `start_clash` spawns clash-lib in background thread, creates controller
+- `stop_clash` cleans up controller and shuts down clash-lib
+- `refresh_proxies` fetches proxy info via IPC and updates UI
+
+**IPC Flow:**
+1. User clicks "Start Proxy"
+2. App spawns clash-lib in background thread with controller enabled
+3. Creates ClashController pointing to clash HTTP API (port 9090)
+4. Controller communicates with clash via HTTP requests
+5. UI updates with information fetched through IPC
+6. "Refresh" button fetches latest proxy info via IPC
 
 ## Future Enhancements
 

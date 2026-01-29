@@ -4,6 +4,30 @@ All notable changes to the clash-iced project will be documented in this file.
 
 ## [Unreleased]
 
+### Added - IPC Communication Layer
+
+#### New Features
+- **IPC Architecture**: Separated UI and clash-lib communication through IPC
+- **ClashController Module**: HTTP/Unix socket client for communicating with clash API
+- **Proxy Information Display**: UI now shows proxy information fetched via IPC
+- **Refresh Button**: Manual refresh of proxy information from running clash instance
+- **Automatic Refresh**: Proxy info automatically refreshes when clash starts
+
+#### Technical Implementation
+- Added `controller.rs` module with ClashController implementation
+- Similar to clash-android controller architecture
+- Supports both HTTP (all platforms) and Unix domain sockets (Unix platforms)
+- IPC methods: get_proxies, get_configs, set_mode, select_proxy, get_connections
+- Modified ClashRuntime to include controller instance
+- Start/stop now communicate with clash via IPC instead of direct calls
+
+#### Dependencies
+- Added hyper, hyper-util for HTTP client
+- Added http-body-util for request/response handling
+- Added hyperlocal for Unix domain socket support (Unix only)
+- Added serde, serde_json for message serialization
+- Added urlencoding for URL encoding
+
 ### Added - Clash Proxy Integration
 
 #### New Features
