@@ -2,9 +2,13 @@ use iced::widget::{button, column, container, row, text, text_input};
 use iced::{Alignment, Element, Length, Task};
 
 fn main() -> iced::Result {
-    iced::application("Clash Iced - Clash Client", ClashApp::update, ClashApp::view)
-        .window_size((800.0, 600.0))
-        .run_with(ClashApp::new)
+    iced::application(
+        "Clash Iced - Clash Client",
+        ClashApp::update,
+        ClashApp::view,
+    )
+    .window_size((800.0, 600.0))
+    .run_with(ClashApp::new)
 }
 
 #[derive(Default)]
