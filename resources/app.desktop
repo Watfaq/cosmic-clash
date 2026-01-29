@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Cosmic Clash
+Comment=GUI of clash-rs
+Type=Application
+Icon=rs.clash.cosmic
+Exec=cosmic-clash %F
+Terminal=false
+StartupNotify=true
+Categories=COSMIC
+Keywords=COSMIC
+MimeType=
