@@ -6,7 +6,7 @@
 //! - Port configuration
 //! - Basic start/stop controls
 //! - Config file switching
-//! - Integration with clash-lib for actual proxy functionality
+//! - Integration with clash-lib via IPC for actual proxy functionality
 //!
 //! Future enhancements will add more advanced features.
 
@@ -15,6 +15,10 @@ use iced::{Alignment, Element, Length, Task};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use std::process::{Child, Command};
+
+mod controller;
+use controller::ClashController;
 
 fn main() -> iced::Result {
     iced::application(
@@ -30,12 +34,16 @@ fn main() -> iced::Result {
 #[derive(Clone)]
 struct ClashRuntime {
     is_running: Arc<Mutex<bool>>,
+    controller: Arc<Mutex<Option<ClashController>>>,
+    process_handle: Arc<Mutex<Option<u32>>>, // Store PID instead of Child
 }
 
 impl Default for ClashRuntime {
     fn default() -> Self {
         Self {
             is_running: Arc::new(Mutex::new(false)),
+            controller: Arc::new(Mutex::new(None)),
+            process_handle: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -283,20 +291,46 @@ async fn start_clash(config_path: String, runtime: ClashRuntime) -> Message {
         return Message::ProxyStarted(Err("Clash is already running".to_string()));
     }
 
-    // Start clash in a separate thread to avoid blocking
+    // Start clash in a separate thread with HTTP controller enabled
     let config_path_clone = config_path.clone();
-    let result = tokio::task::spawn_blocking(move || {
-        // Use clash-lib to start the clash instance
-        let opts = clash_lib::Options {
-            config: clash_lib::Config::File(config_path_clone),
-            cwd: None,
-            rt: Some(clash_lib::TokioRuntime::MultiThread),
-            log_file: None,
-        };
+    let runtime_clone = runtime.clone();
+    
+    let result = tokio::task::spawn(async move {
+        // Start clash in a background thread
+        let handle = tokio::task::spawn_blocking(move || {
+            // Use clash-lib to start the clash instance
+            let opts = clash_lib::Options {
+                config: clash_lib::Config::File(config_path_clone),
+                cwd: None,
+                rt: Some(clash_lib::TokioRuntime::MultiThread),
+                log_file: None,
+            };
+            
+            match clash_lib::start_scaffold(opts) {
+                Ok(_) => Ok(()),
+                Err(e) => Err(format!("Failed to start clash: {}", e)),
+            }
+        });
+
+        // Wait a moment for clash to start
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+        // Create HTTP controller to communicate with clash
+        // Assuming clash is running on default port 9090
+        let controller = ClashController::new_http("http://127.0.0.1:9090".to_string());
         
-        match clash_lib::start_scaffold(opts) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(format!("Failed to start clash: {}", e)),
+        // Test connection by trying to get config
+        match controller.get_configs().await {
+            Ok(_) => {
+                // Store controller for future use
+                let mut ctrl = runtime_clone.controller.lock().await;
+                *ctrl = Some(controller);
+                Ok(())
+            }
+            Err(e) => {
+                // If connection fails, clash might not have started properly
+                Err(format!("Failed to connect to clash controller: {}", e))
+            }
         }
     })
     .await;
@@ -315,6 +349,10 @@ async fn start_clash(config_path: String, runtime: ClashRuntime) -> Message {
 async fn stop_clash(runtime: ClashRuntime) {
     let mut is_running = runtime.is_running.lock().await;
     if *is_running {
+        // Clear controller
+        let mut ctrl = runtime.controller.lock().await;
+        *ctrl = None;
+        
         // Call clash-lib shutdown
         clash_lib::shutdown();
         *is_running = false;
