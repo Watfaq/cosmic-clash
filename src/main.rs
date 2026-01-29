@@ -9,8 +9,9 @@
 //!
 //! Future enhancements will integrate with the actual Clash proxy service.
 
-use iced::widget::{button, column, container, pick_list, row, text, text_input};
+use iced::widget::{button, column, container, pick_list, row, text, text_input, Space};
 use iced::{Alignment, Element, Length, Task};
+use std::path::Path;
 
 fn main() -> iced::Result {
     iced::application(
@@ -22,7 +23,7 @@ fn main() -> iced::Result {
     .run_with(ClashApp::new)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ConfigFile {
     name: String,
     path: String,
@@ -114,16 +115,26 @@ impl ClashApp {
             Message::AddConfigFile => {
                 // Add new config file from the input
                 if !self.config_path_input.is_empty() {
-                    let name = self
-                        .config_path_input
-                        .split('/')
-                        .next_back()
-                        .unwrap_or("New Config")
-                        .to_string();
-                    let new_config = ConfigFile::new(name, self.config_path_input.clone());
-                    self.config_files.push(new_config.clone());
-                    self.selected_config = Some(new_config);
-                    self.config_path_input.clear();
+                    // Check if config with same path already exists
+                    let path_exists = self
+                        .config_files
+                        .iter()
+                        .any(|c| c.path == self.config_path_input);
+
+                    if !path_exists {
+                        // Extract filename using cross-platform Path API
+                        let path = Path::new(&self.config_path_input);
+                        let name = path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("New Config")
+                            .to_string();
+
+                        let new_config = ConfigFile::new(name, self.config_path_input.clone());
+                        self.config_files.push(new_config.clone());
+                        self.selected_config = Some(new_config);
+                        self.config_path_input.clear();
+                    }
                 }
             }
         }
@@ -182,14 +193,14 @@ impl ClashApp {
         let content = column![
             title,
             status_text,
-            text("").size(10), // spacer
+            Space::with_height(10.0),
             config_label,
             config_picker,
             current_config_text,
-            text("").size(10), // spacer
+            Space::with_height(10.0),
             text("Add New Config:").size(14),
             row![config_path_input, add_config_button].spacing(10),
-            text("").size(10), // spacer
+            Space::with_height(10.0),
             text("Proxy URL:").size(14),
             proxy_input,
             text("Port:").size(14),
