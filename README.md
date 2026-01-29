@@ -5,9 +5,11 @@ A GUI client for clash-rs built with the iced framework in Rust.
 ## Features
 
 - Cross-platform GUI built with [iced](https://github.com/iced-rs/iced)
+- **Config file switching** - Select and switch between different Clash configuration files
 - Proxy configuration interface
 - Start/Stop proxy controls
 - Port configuration
+- Add custom config files dynamically
 - Clean and modern user interface
 
 ## Building
@@ -36,10 +38,14 @@ cargo run --release
 
 ## Usage
 
-1. Enter your proxy URL in the "Proxy URL" field
-2. Configure the port (default: 7890)
-3. Click "Start Proxy" to enable the proxy
-4. Click "Stop Proxy" to disable the proxy
+1. **Select a config file** from the dropdown menu or add a new one:
+   - Choose from pre-configured options (Default, Home, Custom)
+   - Or enter a custom config file path and click "Add Config"
+2. The current config file path is displayed below the selector
+3. Enter your proxy URL in the "Proxy URL" field
+4. Configure the port (default: 7890)
+5. Click "Start Proxy" to enable the proxy
+6. Click "Stop Proxy" to disable the proxy
 
 ## Development
 
