@@ -1,3 +1,13 @@
+//! Clash Iced - A GUI client for Clash proxy
+//!
+//! This is the initial GUI implementation using the iced framework.
+//! The current version provides the user interface structure for:
+//! - Proxy URL configuration
+//! - Port configuration
+//! - Basic start/stop controls
+//!
+//! Future enhancements will integrate with the actual Clash proxy service.
+
 use iced::widget::{button, column, container, row, text, text_input};
 use iced::{Alignment, Element, Length, Task};
 
@@ -41,15 +51,19 @@ impl ClashApp {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::ProxyUrlChanged(value) => {
+                // TODO: Add URL validation
                 self.proxy_url = value;
             }
             Message::PortChanged(value) => {
+                // TODO: Add port number validation (1-65535)
                 self.port = value;
             }
             Message::StartProxy => {
+                // TODO: Integrate with actual Clash proxy service
                 self.status = String::from("Running");
             }
             Message::StopProxy => {
+                // TODO: Stop the Clash proxy service
                 self.status = String::from("Stopped");
             }
         }
