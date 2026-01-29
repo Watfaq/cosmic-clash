@@ -6,12 +6,15 @@
 //! - Port configuration
 //! - Basic start/stop controls
 //! - Config file switching
+//! - Integration with clash-lib for actual proxy functionality
 //!
-//! Future enhancements will integrate with the actual Clash proxy service.
+//! Future enhancements will add more advanced features.
 
 use iced::widget::{button, column, container, pick_list, row, text, text_input, Space};
 use iced::{Alignment, Element, Length, Task};
 use std::path::Path;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 fn main() -> iced::Result {
     iced::application(
@@ -21,6 +24,20 @@ fn main() -> iced::Result {
     )
     .window_size((800.0, 600.0))
     .run_with(ClashApp::new)
+}
+
+// Holds the clash runtime state
+#[derive(Clone)]
+struct ClashRuntime {
+    is_running: Arc<Mutex<bool>>,
+}
+
+impl Default for ClashRuntime {
+    fn default() -> Self {
+        Self {
+            is_running: Arc::new(Mutex::new(false)),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -41,7 +58,6 @@ impl std::fmt::Display for ConfigFile {
     }
 }
 
-#[derive(Default)]
 struct ClashApp {
     proxy_url: String,
     port: String,
@@ -49,6 +65,7 @@ struct ClashApp {
     config_files: Vec<ConfigFile>,
     selected_config: Option<ConfigFile>,
     config_path_input: String,
+    clash_runtime: ClashRuntime,
 }
 
 #[derive(Debug, Clone)]
@@ -60,6 +77,8 @@ enum Message {
     ConfigSelected(ConfigFile),
     ConfigPathChanged(String),
     AddConfigFile,
+    ProxyStarted(Result<(), String>),
+    ProxyStopped,
 }
 
 impl ClashApp {
@@ -82,6 +101,7 @@ impl ClashApp {
                 config_files: default_configs.clone(),
                 selected_config: Some(default_configs[0].clone()),
                 config_path_input: String::new(),
+                clash_runtime: ClashRuntime::default(),
             },
             Task::none(),
         )
@@ -92,25 +112,61 @@ impl ClashApp {
             Message::ProxyUrlChanged(value) => {
                 // TODO: Add URL validation
                 self.proxy_url = value;
+                Task::none()
             }
             Message::PortChanged(value) => {
                 // TODO: Add port number validation (1-65535)
                 self.port = value;
+                Task::none()
             }
             Message::StartProxy => {
-                // TODO: Integrate with actual Clash proxy service
-                self.status = String::from("Running");
+                // Start the clash proxy service
+                if let Some(config) = &self.selected_config {
+                    self.status = String::from("Starting...");
+                    let config_path = config.path.clone();
+                    let runtime = self.clash_runtime.clone();
+                    
+                    Task::future(async move {
+                        start_clash(config_path, runtime).await
+                    })
+                } else {
+                    self.status = String::from("Error: No config selected");
+                    Task::none()
+                }
             }
             Message::StopProxy => {
-                // TODO: Stop the Clash proxy service
+                // Stop the clash proxy service
+                self.status = String::from("Stopping...");
+                let runtime = self.clash_runtime.clone();
+                
+                Task::future(async move {
+                    stop_clash(runtime).await;
+                    Message::ProxyStopped
+                })
+            }
+            Message::ProxyStarted(result) => {
+                match result {
+                    Ok(_) => {
+                        self.status = String::from("Running");
+                    }
+                    Err(e) => {
+                        self.status = format!("Error: {}", e);
+                    }
+                }
+                Task::none()
+            }
+            Message::ProxyStopped => {
                 self.status = String::from("Stopped");
+                Task::none()
             }
             Message::ConfigSelected(config) => {
                 // TODO: Load the selected config file
                 self.selected_config = Some(config);
+                Task::none()
             }
             Message::ConfigPathChanged(value) => {
                 self.config_path_input = value;
+                Task::none()
             }
             Message::AddConfigFile => {
                 // Add new config file from the input
@@ -136,9 +192,9 @@ impl ClashApp {
                         self.config_path_input.clear();
                     }
                 }
+                Task::none()
             }
         }
-        Task::none()
     }
 
     fn view(&self) -> Element<'_, Message> {
@@ -216,5 +272,51 @@ impl ClashApp {
             .height(Length::Fill)
             .padding(20)
             .into()
+    }
+}
+
+// Helper function to start clash
+async fn start_clash(config_path: String, runtime: ClashRuntime) -> Message {
+    // Check if already running
+    let mut is_running = runtime.is_running.lock().await;
+    if *is_running {
+        return Message::ProxyStarted(Err("Clash is already running".to_string()));
+    }
+
+    // Start clash in a separate thread to avoid blocking
+    let config_path_clone = config_path.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        // Use clash-lib to start the clash instance
+        let opts = clash_lib::Options {
+            config: clash_lib::Config::File(config_path_clone),
+            cwd: None,
+            rt: Some(clash_lib::TokioRuntime::MultiThread),
+            log_file: None,
+        };
+        
+        match clash_lib::start_scaffold(opts) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("Failed to start clash: {}", e)),
+        }
+    })
+    .await;
+
+    match result {
+        Ok(Ok(_)) => {
+            *is_running = true;
+            Message::ProxyStarted(Ok(()))
+        }
+        Ok(Err(e)) => Message::ProxyStarted(Err(e)),
+        Err(e) => Message::ProxyStarted(Err(format!("Task error: {}", e))),
+    }
+}
+
+// Helper function to stop clash
+async fn stop_clash(runtime: ClashRuntime) {
+    let mut is_running = runtime.is_running.lock().await;
+    if *is_running {
+        // Call clash-lib shutdown
+        clash_lib::shutdown();
+        *is_running = false;
     }
 }
