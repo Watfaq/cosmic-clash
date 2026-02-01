@@ -114,9 +114,6 @@ pub async fn download_file_with_progress(
     }
 
     // Create output file and write
-    _ = tokio::fs::File::create(&output_path)
-        .await
-        .context(format!("Failed to create file: {output_path}"))?;
     tokio::fs::write(&output_path, &buffer)
         .await
         .context(format!("Failed to write to file: {output_path}"))?;
