@@ -6,6 +6,22 @@ license = "AGPL3.0"
 description = "GUI of clash-rs"
 repository = "https://github.com/pop-os/cosmic-app-template"
 
+
+[features]
+default = ["cosmic"]
+
+# See https://github.com/pop-os/libcosmic/blob/master/Cargo.toml for available features.
+cosmic = [
+    "libcosmic/a11y", 
+    "libcosmic/about", 
+    "libcosmic/dbus-config", 
+    "libcosmic/multi-window", 
+    "libcosmic/single-instance", 
+    "libcosmic/tokio", 
+    "libcosmic/winit",
+    "libcosmic/wgpu"
+]
+
 [dependencies]
 futures-util = "0.3.31"
 i18n-embed = { version = "0.16", features = [
@@ -17,29 +33,13 @@ open = "5.3.2"
 rust-embed = "8.8.0"
 tokio = { version = "1.48.0", features = ["full"] }
 
-[dependencies.libcosmic]
+[target.'cfg(target_os = "linux")'.dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
-# See https://github.com/pop-os/libcosmic/blob/master/Cargo.toml for available features.
-features = [
-    # Accessibility support
-    "a11y",
-    # About widget for the app
-    "about",
-    # Uses cosmic-settings-daemon to watch for config file changes
-    "dbus-config",
-    # Support creating additional application windows.
-    "multi-window",
-    # On app startup, focuses an existing instance if the app is already open
-    "single-instance",
-    # Uses tokio as the executor for the runtime
-    "tokio",
-    # Windowing support for X11, Windows, Mac, & Redox
-    "winit",
-    # Add Wayland support to winit
-    "wayland",
-    # GPU-accelerated rendering
-    "wgpu",
-]
+features = ["wayland"]
+
+[target.'cfg(not(target_os = "linux"))'.dependencies.libcosmic]
+git = "https://github.com/pop-os/libcosmic.git"
+features = []
 
 # Uncomment to test a locally-cloned libcosmic
 # [patch.'https://github.com/pop-os/libcosmic']
