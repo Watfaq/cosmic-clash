@@ -1,0 +1,7 @@
+[bindings.kotlin]
+package_name = "rs.clash"
+cdylib_name = "clash_ffi"
+
+[bindings.swift]
+module_name = "ClashFFI"
+cdylib_name = "clash_ffi"

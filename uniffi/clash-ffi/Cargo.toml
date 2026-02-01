@@ -1,0 +1,53 @@
+[package]
+name = "clash-ffi"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL3.0"
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+uniffi = { version = "0.28", features = ["cli", "tokio"] }
+
+eyre = "0.6"
+thiserror = "2.0"
+tokio = { version = "1.48.0", features = ["full"] }
+async-compat = "0.2"
+once_cell = "1"
+
+# Logging
+tracing = "0.1"
+tracing-error = "0.2"
+time = { version = "0.3", features = ["macros", "local-offset"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "fmt"] }
+color-eyre = "0.6"
+bytes = "1"
+
+ipnet = "2"
+
+# HTTP client dependencies
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["client", "client-legacy", "tokio"] }
+http-body-util = "0.1"
+hyperlocal = "0.9"
+urlencoding = "2"
+hyper-http-proxy = { version = "1", default-features = false, features = ["rustls-tls-webpki-roots"] }
+hyper-rustls = { version = "0.27", features = ["rustls-platform-verifier", "http1", "tls12", "logging", "aws-lc-rs"] }
+rustls = { version = "0.23", default-features = false, features = ["std", "aws-lc-rs"] }
+webpki-roots = "1"
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "stream"] }
+tokio-stream = "0.1"
+
+[dependencies.clash-lib]
+package = "clash-lib"
+git = "https://github.com/Watfaq/clash-rs.git"
+branch = "master"
+features = [
+    "tuic", 
+    "shadowsocks",
+    "aws-lc-rs"
+]
+default-features = false
