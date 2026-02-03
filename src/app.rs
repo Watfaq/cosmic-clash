@@ -58,7 +58,7 @@ impl cosmic::Application for AppModel {
     type Message = Message;
 
     /// Unique identifier in RDNN (reverse domain name notation) format.
-    const APP_ID: &'static str = "dev.mmurphy.Test";
+    const APP_ID: &'static str = "rs.clash.cosmic";
 
     fn core(&self) -> &cosmic::Core {
         &self.core
