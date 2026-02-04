@@ -1,3 +1,7 @@
+home = 主页
+profile = 配置
+settings = 设置
+
 app-title = Cosmic Clash
 about = 关于
 repository = 仓库
