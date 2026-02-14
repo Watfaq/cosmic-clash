@@ -44,6 +44,7 @@ pub struct AppModel {
 #[derive(Debug, Clone)]
 pub enum Message {
 	ToggleContextPage(ContextPage),
+	LaunchUrl(String),
 	ToggleVPN,
 	UpdateConfig(Config),
 }
@@ -304,6 +305,9 @@ impl cosmic::Application for AppModel {
             }
 			Message::UpdateConfig(config) => {
 				self.config = config;
+			}
+			Message::LaunchUrl(url) => {
+				_ = open::that_detached(&url);
 			}
 		}
 		Task::none()
