@@ -49,7 +49,16 @@ eyre = "0.6"
 git = "https://github.com/pop-os/libcosmic.git"
 # features = ["wayland"]  # Removed for WSL compatibility
 
-[target.'cfg(not(target_os = "linux"))'.dependencies.libcosmic]
+[target.'cfg(target_os = "windows")'.dependencies.libcosmic]
+git = "https://github.com/pop-os/libcosmic.git"
+features = ["winit", "wgpu"]
+
+[target.'cfg(target_os = "macos")'.dependencies.libcosmic]
+git = "https://github.com/pop-os/libcosmic.git"
+features = ["winit", "wgpu"]
+
+# Fallback for other platforms
+[target.'cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))'.dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
 features = []
 
