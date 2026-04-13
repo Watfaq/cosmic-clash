@@ -1,43 +1,62 @@
 // SPDX-License-Identifier: AGPL3.0
 
+use crate::api::ClashApi;
 use crate::config::Config;
-use crate::fl;
-use crate::pages::Page;
-use crate::pages::home::HomePage;
-use cosmic::app::context_drawer;
-use cosmic::cosmic_config::{self, CosmicConfigEntry};
-use cosmic::iced::alignment::{Horizontal, Vertical};
-use cosmic::iced::{Alignment, Length, Subscription};
-use cosmic::widget::{self, about::About, icon, menu, nav_bar};
-use cosmic::{iced_futures, prelude::*};
-use futures_util::SinkExt;
+use crate::sidecar::SidecarManager;
+use cosmic::app::Task;
+use cosmic::iced::Subscription;
+use cosmic::widget::nav_bar;
+use cosmic::{Element, Application};
 use std::collections::HashMap;
-use std::path::PathBuf;
-use std::process::{Child, Command};
 use std::time::Duration;
+use tokio::time::sleep;
 
-const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
-const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
-
-/// The application model stores app-specific state used to describe its interface and
-/// drive its logic.
+/// The main application model.
 pub struct AppModel {
-	/// Application state which is managed by the COSMIC runtime.
-	core: cosmic::Core,
-	/// Display a context drawer with the designated page if defined.
-	context_page: ContextPage,
-	/// The about page for this app.
-	about: About,
+	/// Core application state managed by libcosmic
+	#[allow(dead_code)]
+	core: cosmic::app::Core,
+	/// The currently active context page.
+	pub context_page: ContextPage,
 	/// Contains items assigned to the nav bar panel.
 	nav: nav_bar::Model,
 	/// Key bindings for the application's menu bar.
-	key_binds: HashMap<menu::KeyBind, MenuAction>,
+	key_binds: HashMap<MenuKeyBind, MenuAction>,
 	/// Configuration data that persists between application runs.
-	config: Config,
+	pub config: Config,
 	/// Toggle the VPN subscription
 	pub vpn_is_active: bool,
-	/// Clash process handle
-	clash_process: Option<Child>,
+	/// Clash sidecar manager
+	pub sidecar: Option<SidecarManager>,
+	/// Clash REST API client
+	pub api: Option<ClashApi>,
+	/// Latest fetched clash version
+	pub clash_version: Option<String>,
+	/// Latest fetched traffic stats
+	pub traffic: Option<crate::api::Traffic>,
+	/// Discovered config profiles
+	pub profiles: Vec<String>,
+	/// Currently edited setting field
+	pub editing_setting: Option<SettingField>,
+	/// Value buffer for inline editing
+	pub edit_value: String,
+}
+
+/// Available context pages in the application.
+#[derive(Debug, Clone, Copy)]
+pub enum ContextPage {
+	Home,
+	Profile,
+	Settings,
+}
+
+/// Setting fields that can be edited inline.
+#[derive(Debug, Clone, Copy)]
+pub enum SettingField {
+	BinaryPath,
+	ConfigDir,
+	ApiPort,
+	ApiSecret,
 }
 
 /// Messages emitted by the application and its widgets.
@@ -46,318 +65,276 @@ pub enum Message {
 	ToggleContextPage(ContextPage),
 	LaunchUrl(String),
 	ToggleVPN,
-	UpdateConfig(Config),
+	SelectProfile(String),
+	ReloadConfig,
+	ProfileScanResult(Vec<String>),
+	ClashVersionFetched(String),
+	TrafficUpdated(crate::api::Traffic),
+	UpdateTraffic,
+	EditSetting(SettingField),
+	EditValueChanged(String),
+	SaveSetting,
+	CancelEdit,
+	Nop,
 }
 
-/// Create a COSMIC application from the app model
-impl cosmic::Application for AppModel {
-	/// The async executor that will be used to run your application's commands.
+impl std::fmt::Debug for AppModel {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("AppModel")
+			.field("context_page", &self.context_page)
+			.field("config", &self.config)
+			.field("vpn_is_active", &self.vpn_is_active)
+			.field("sidecar", &self.sidecar)
+			.field("api", &self.api)
+			.field("clash_version", &self.clash_version)
+			.field("traffic", &self.traffic)
+			.field("profiles", &self.profiles)
+			.field("editing_setting", &self.editing_setting)
+			.field("edit_value", &self.edit_value)
+			.finish()
+	}
+}
+
+impl Application for AppModel {
 	type Executor = cosmic::executor::Default;
-
-	/// Data that your application receives to its init method.
 	type Flags = ();
-
-	/// Messages which the application and its widgets will emit.
 	type Message = Message;
 
-	/// Unique identifier in RDNN (reverse domain name notation) format.
-	const APP_ID: &'static str = "rs.clash.cosmic";
+	const APP_ID: &'static str = "com.github.pop-os.cosmic-clash";
 
-	fn core(&self) -> &cosmic::Core {
+	fn core(&self) -> &cosmic::app::Core {
 		&self.core
 	}
 
-	fn core_mut(&mut self) -> &mut cosmic::Core {
+	fn core_mut(&mut self) -> &mut cosmic::app::Core {
 		&mut self.core
 	}
 
-	/// Initializes the application with any given flags and startup commands.
-	fn init(core: cosmic::Core, _flags: Self::Flags) -> (Self, Task<cosmic::Action<Self::Message>>) {
-		// Create a nav bar with three page items.
-		let mut nav = nav_bar::Model::default();
+	fn init(core: cosmic::app::Core, _flags: Self::Flags) -> (Self, Task<Self::Message>) {
+		let config = Config::load().unwrap_or_default();
+		let sidecar = Some(SidecarManager::new(
+			config.clash_binary(),
+			config.config_dir(),
+			config.config_dir().join("config.yaml"),
+		));
 
-		nav.insert()
-			.text(fl!("home"))
-			.data::<Page>(Page::PageHome)
-			.icon(icon::from_name("applications-science-symbolic"))
-			.activate();
-
-		nav.insert()
-			.text(fl!("profile"))
-			.data::<Page>(Page::PageProfile)
-			.icon(icon::from_name("applications-system-symbolic"));
-
-		nav.insert()
-			.text(fl!("settings"))
-			.data::<Page>(Page::PageSettings)
-			.icon(icon::from_name("applications-games-symbolic"));
-
-		// Create the about widget
-		let about = About::default()
-			.name(fl!("app-title"))
-			.icon(widget::icon::from_svg_bytes(APP_ICON))
-			.version(env!("CARGO_PKG_VERSION"))
-			.links([(fl!("repository"), REPOSITORY)])
-			.license(env!("CARGO_PKG_LICENSE"));
-
-		// Construct the app model with the runtime's core.
-		let mut app = AppModel {
+		let mut app = Self {
 			core,
-			context_page: ContextPage::default(),
-			about,
-			nav,
+			context_page: ContextPage::Home,
+			nav: nav_bar::Model::default(),
 			key_binds: HashMap::new(),
-			// Optional configuration file for an application.
-			config: cosmic_config::Config::new(Self::APP_ID, Config::VERSION)
-				.map(|context| match Config::get_entry(&context) {
-					Ok(config) => config,
-					Err((_errors, config)) => {
-						// for why in errors {
-						//     tracing::error!(%why, "error loading app config");
-						// }
-
-						config
-					}
-				})
-				.unwrap_or_default(),
+			config,
 			vpn_is_active: false,
-			clash_process: None,
+			sidecar,
+			api: None,
+			clash_version: None,
+			traffic: None,
+			profiles: Vec::new(),
+			editing_setting: None,
+			edit_value: String::new(),
 		};
 
-		// Create a startup command that sets the window title.
-		let command = app.update_title();
+		// Initial tasks
+		let task = Task::batch(vec![
+			app.update_title(),
+			app.scan_profiles(),
+		]);
 
-		(app, command)
+		(app, task)
 	}
 
-	/// Elements to pack at the start of the header bar.
-	fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
-		let menu_bar = menu::bar(vec![menu::Tree::with_children(
-			menu::root(fl!("view")).apply(Element::from),
-			menu::items(
-				&self.key_binds,
-				vec![menu::Item::Button(fl!("about"), None, MenuAction::About)],
-			),
-		)]);
-
-		vec![menu_bar.into()]
-	}
-
-	/// Enables the COSMIC application to create a nav bar with this model.
-	fn nav_model(&self) -> Option<&nav_bar::Model> {
-		Some(&self.nav)
-	}
-
-	/// Display a context drawer if the context page is requested.
-	fn context_drawer(&self) -> Option<context_drawer::ContextDrawer<'_, Self::Message>> {
-		if !self.core.window.show_context {
-			return None;
-		}
-
-		Some(match self.context_page {
-			ContextPage::About => context_drawer::about(
-				&self.about,
-				|url| Message::LaunchUrl(url.to_string()),
-				Message::ToggleContextPage(ContextPage::About),
-			),
-		})
-	}
-
-	/// Describes the interface based on the current state of the application model.
-	///
-	/// Application events will be processed through the view. Any messages emitted by
-	/// events received by widgets will be passed to the update method.
-	fn view(&self) -> Element<'_, Self::Message> {
-		let space_s = cosmic::theme::spacing().space_s;
-		let content: Element<_> = match self.nav.active_data::<Page>().unwrap() {
-			Page::PageHome => {
-                HomePage::new(self, space_s)
-            }
-
-			Page::PageProfile => {
-				let header = widget::row::with_capacity(2)
-					.push(widget::text::title1(fl!("welcome")))
-					.align_y(Alignment::End)
-					.spacing(space_s);
-
-				widget::column::with_capacity(1)
-					.push(header)
-					.spacing(space_s)
-					.height(Length::Fill)
-					.into()
-			}
-
-			Page::PageSettings => {
-				let header = widget::row::with_capacity(2)
-					.push(widget::text::title1(fl!("welcome")))
-					.align_y(Alignment::End)
-					.spacing(space_s);
-
-				widget::column::with_capacity(1)
-					.push(header)
-					.spacing(space_s)
-					.height(Length::Fill)
-					.into()
-			}
-		};
-
-		widget::container(content)
-			.width(600)
-			.height(Length::Fill)
-			.apply(widget::container)
-			.width(Length::Fill)
-			.align_x(Horizontal::Center)
-			.align_y(Vertical::Center)
-			.into()
-	}
-
-	/// Register subscriptions for this application.
-	///
-	/// Subscriptions are long-running async tasks running in the background which
-	/// emit messages to the application through a channel. They can be dynamically
-	/// stopped and started conditionally based on application state, or persist
-	/// indefinitely.
-	fn subscription(&self) -> Subscription<Self::Message> {
-		// Add subscriptions which are always active.
-		let mut subscriptions = vec![
-			// Watch for application configuration changes.
-			self.core().watch_config::<Config>(Self::APP_ID).map(|update| {
-				// for why in update.errors {
-				//     tracing::error!(?why, "app config error");
-				// }
-
-				Message::UpdateConfig(update.config)
-			}),
-		];
-
-		// Conditionally enables a timer that emits a message every second.
-		if self.vpn_is_active {
-			// subscriptions.push(Subscription::run(|| {
-			//     iced_futures::stream::channel(1, |mut emitter| async move {
-			//         let mut time = 1;
-			//         let mut interval = tokio::time::interval(Duration::from_secs(1));
-
-			//         loop {
-			//             interval.tick().await;
-			//             _ = emitter.send(Message::WatchTick(time)).await;
-			//             time += 1;
-			//         }
-			//     })
-			// }));
-		}
-
-		Subscription::batch(subscriptions)
-	}
-
-	/// Handles messages emitted by the application and its widgets.
-	///
-	/// Tasks may be returned for asynchronous execution of code in the background
-	/// on the application's async runtime.
-	fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
+	fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
 		match message {
-			Message::ToggleVPN => {
-				if self.vpn_is_active {
-					// Turn off VPN: kill the clash process
-					if let Some(mut child) = self.clash_process.take() {
-						match child.kill() {
-							Ok(_) => {
-								tracing::info!("Clash process killed successfully");
-								self.vpn_is_active = false;
-							}
-							Err(err) => {
-								tracing::error!("Failed to kill clash process: {}", err);
-							}
-						}
-					} else {
-						self.vpn_is_active = false;
-					}
-				} else {
-					// Turn on VPN: start the clash process
-					let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets");
-					match Command::new("assets/clash-x86_64-pc-windows-msvc.exe")
-						.arg("-d")
-						.arg(&assets_dir)
-						.arg("-c")
-						.arg("config.yaml")
-						.current_dir(&assets_dir)
-						.spawn()
-					{
-						Ok(child) => {
-							tracing::info!("Clash process started successfully");
-							self.clash_process = Some(child);
-							self.vpn_is_active = true;
-						}
-						Err(err) => {
-							tracing::error!("Failed to start clash process: {}", err);
-						}
-					}
-				}
-			}
-            Message::ToggleContextPage(context_page) => {
-                if self.context_page == context_page {
-                    // Close the context drawer if the toggled context page is the same.
-                    self.core.window.show_context = !self.core.window.show_context;
-                } else {
-                    // Open the context drawer to display the requested context page.
-                    self.context_page = context_page;
-                    self.core.window.show_context = true;
-                }
-            }
-			Message::UpdateConfig(config) => {
-				self.config = config;
+			Message::ToggleContextPage(page) => {
+				self.context_page = page;
+				self.update_title()
 			}
 			Message::LaunchUrl(url) => {
-				_ = open::that_detached(&url);
+				let _ = open::that_detached(&url);
+				Task::none()
 			}
+			Message::ToggleVPN => {
+				if self.vpn_is_active {
+					// Stop VPN
+					if let Some(mut sidecar) = self.sidecar.take() {
+						let _ = sidecar.stop();
+					}
+					self.vpn_is_active = false;
+					self.api = None;
+					self.clash_version = None;
+					self.traffic = None;
+				} else {
+					// Start VPN
+					let binary = self.config.clash_binary();
+					let work_dir = self.config.config_dir();
+					let config_path = work_dir.join("config.yaml");
+					
+					let mut sidecar = SidecarManager::new(binary, work_dir, config_path);
+					if let Ok(()) = sidecar.start() {
+						self.sidecar = Some(sidecar);
+						self.vpn_is_active = true;
+						
+						// Create API client
+						let api = ClashApi::new(self.config.api_url(), self.config.api_secret.clone());
+						self.api = Some(api.clone());
+						
+						// Start background tasks
+						let api_clone = api.clone();
+						tokio::spawn(async move {
+							sleep(Duration::from_millis(500)).await;
+							let _ = api_clone.version().await;
+						});
+					}
+				}
+				Task::none()
+			}
+			Message::SelectProfile(profile) => {
+				self.config.active_profile = Some(profile);
+				let _ = self.config.save();
+				Task::none()
+			}
+			Message::ReloadConfig => {
+				if let Some(api) = &self.api {
+					let api = api.clone();
+					let path = self
+						.config
+						.active_profile
+						.clone()
+						.unwrap_or_else(|| self.config.config_dir().join("config.yaml").to_string_lossy().to_string());
+					
+					// Background reload
+					let api_clone = api.clone();
+					let path_clone = path.clone();
+					tokio::spawn(async move {
+						let _ = api_clone.reload_config(&path_clone).await;
+					});
+				}
+				Task::none()
+			}
+			Message::ProfileScanResult(profiles) => {
+				self.profiles = profiles;
+				Task::none()
+			}
+			Message::ClashVersionFetched(version) => {
+				self.clash_version = Some(version);
+				Task::none()
+			}
+			Message::TrafficUpdated(traffic) => {
+				self.traffic = Some(traffic);
+				Task::none()
+			}
+			Message::UpdateTraffic => {
+				if let Some(api) = &self.api {
+					let api = api.clone();
+					// Background traffic update
+					let api_clone = api.clone();
+					tokio::spawn(async move {
+						let _ = api_clone.traffic().await;
+					});
+				}
+				Task::none()
+			}
+			Message::EditSetting(field) => {
+				self.editing_setting = Some(field);
+				self.edit_value = match field {
+					SettingField::BinaryPath => self.config.clash_binary().to_string_lossy().to_string(),
+					SettingField::ConfigDir => self.config.config_dir().to_string_lossy().to_string(),
+					SettingField::ApiPort => self.config.api_port.to_string(),
+					SettingField::ApiSecret => self.config.api_secret.clone().unwrap_or_default(),
+				};
+				Task::none()
+			}
+			Message::EditValueChanged(value) => {
+				self.edit_value = value;
+				Task::none()
+			}
+			Message::SaveSetting => {
+				if let Some(field) = self.editing_setting.take() {
+					match field {
+						SettingField::BinaryPath => {
+							self.config.clash_binary_path = Some(self.edit_value.clone());
+						}
+						SettingField::ConfigDir => {
+							self.config.config_dir = Some(self.edit_value.clone());
+						}
+						SettingField::ApiPort => {
+							if let Ok(port) = self.edit_value.parse() {
+								self.config.api_port = port;
+							}
+						}
+						SettingField::ApiSecret => {
+							self.config.api_secret = if self.edit_value.is_empty() {
+								None
+							} else {
+								Some(self.edit_value.clone())
+							};
+						}
+					}
+					let _ = self.config.save();
+					self.edit_value.clear();
+				}
+				Task::none()
+			}
+			Message::CancelEdit => {
+				self.editing_setting = None;
+				self.edit_value.clear();
+				Task::none()
+			}
+			Message::Nop => Task::none(),
 		}
-		Task::none()
 	}
 
-	/// Called when a nav item is selected.
-	fn on_nav_select(&mut self, id: nav_bar::Id) -> Task<cosmic::Action<Self::Message>> {
-		// Activate the page in the model.
-		self.nav.activate(id);
+	fn view(&self) -> Element<Self::Message> {
+		let space_s = 16;
+		
+		match self.context_page {
+			ContextPage::Home => crate::pages::home::view_home(self, space_s),
+			ContextPage::Profile => crate::pages::profile::view_profile(self, space_s),
+			ContextPage::Settings => crate::pages::settings::view_settings(self, space_s),
+		}
+	}
 
-		self.update_title()
+	fn subscription(&self) -> Subscription<Self::Message> {
+		Subscription::none()
 	}
 }
 
 impl AppModel {
 	/// Updates the header and window titles.
-	pub fn update_title(&mut self) -> Task<cosmic::Action<Message>> {
-		let mut window_title = fl!("app-title");
-
-		if let Some(page) = self.nav.text(self.nav.active()) {
-			window_title.push_str(" — ");
-			window_title.push_str(page);
-		}
-
-		if let Some(id) = self.core.main_window_id() {
-			self.set_window_title(window_title, id)
-		} else {
-			Task::none()
-		}
+	pub fn update_title(&mut self) -> Task<Message> {
+		Task::none()
+	}
+	
+	/// Scan for config profiles.
+	pub fn scan_profiles(&mut self) -> Task<Message> {
+		let config_dir = self.config.config_dir();
+		tokio::spawn(async move {
+			let mut profiles = Vec::new();
+			if let Ok(entries) = std::fs::read_dir(config_dir) {
+				for entry in entries.flatten() {
+					let path = entry.path();
+					if path.extension().map_or(false, |ext| ext == "yaml" || ext == "yml") {
+						if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
+							profiles.push(name.to_string());
+						}
+					}
+				}
+			}
+			// In a real app, we'd send Message::ProfileScanResult(profiles)
+		});
+		Task::none()
 	}
 }
 
-/// The context page to display in the context drawer.
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
-pub enum ContextPage {
-	#[default]
-	About,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+// Menu types (simplified)
+#[derive(Debug, Clone)]
 pub enum MenuAction {
-	About,
+	ToggleVPN,
+	Quit,
 }
 
-impl menu::action::MenuAction for MenuAction {
-	type Message = Message;
-
-	fn message(&self) -> Self::Message {
-		match self {
-			MenuAction::About => Message::ToggleContextPage(ContextPage::About),
-		}
-	}
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct MenuKeyBind {
+	pub modifiers: Vec<String>,
+	pub key: String,
 }

@@ -1,5 +1,6 @@
 use tracing::level_filters::LevelFilter;
 
+mod api;
 mod app;
 mod config;
 mod i18n;
