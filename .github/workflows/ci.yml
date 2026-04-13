@@ -12,9 +12,9 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # Basic compilation and linting
+  # Basic compilation and linting on Linux
   check:
-    name: Check
+    name: Check (Linux)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -45,8 +45,8 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-features -- -D warnings
 
-  # Build and test on Linux
-  build:
+  # Build on Linux
+  build-linux:
     name: Build Linux
     needs: check
     runs-on: ubuntu-latest
@@ -96,3 +96,102 @@ jobs:
             target/debug/cosmic-clash
             target/release/cosmic-clash
           retention-days: 7
+
+  # Build on Windows
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build debug version
+        run: cargo build --verbose
+
+      - name: Build release version
+        run: cargo build --release --verbose
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: cosmic-clash-windows
+          path: |
+            target/debug/cosmic-clash.exe
+            target/release/cosmic-clash.exe
+          retention-days: 7
+
+  # Build on macOS
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build debug version
+        run: cargo build --verbose
+
+      - name: Build release version
+        run: cargo build --release --verbose
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: cosmic-clash-macos
+          path: |
+            target/debug/cosmic-clash
+            target/release/cosmic-clash
+          retention-days: 7
+
+  # Create release when tag is pushed
+  release:
+    name: Create Release
+    needs: [build-linux, build-windows, build-macos]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            cosmic-clash-linux/cosmic-clash
+            cosmic-clash-windows/cosmic-clash.exe
+            cosmic-clash-macos/cosmic-clash
+          generate_release_notes: true
+          draft: false
+          prerelease: false

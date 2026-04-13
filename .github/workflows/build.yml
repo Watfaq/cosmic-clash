@@ -13,8 +13,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    name: Build and Test
+  build-linux:
+    name: Build Linux
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -58,6 +58,78 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cosmic-clash-linux
+          path: |
+            target/debug/cosmic-clash
+            target/release/cosmic-clash
+          retention-days: 7
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build
+        run: |
+          cargo build --verbose
+          cargo build --release --verbose
+
+      - name: Upload artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cosmic-clash-windows
+          path: |
+            target/debug/cosmic-clash.exe
+            target/release/cosmic-clash.exe
+          retention-days: 7
+
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build
+        run: |
+          cargo build --verbose
+          cargo build --release --verbose
+
+      - name: Upload artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cosmic-clash-macos
           path: |
             target/debug/cosmic-clash
             target/release/cosmic-clash
