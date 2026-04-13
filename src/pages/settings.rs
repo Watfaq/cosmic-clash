@@ -13,88 +13,109 @@ pub fn view_settings(
 		.align_y(Alignment::End)
 		.spacing(space_s);
 
-	let mut column = widget::column::with_capacity(6)
+	let mut main_column = widget::column::with_capacity(6)
 		.push(header)
-		.spacing(space_s)
+		.spacing(space_s * 2)
 		.height(Length::Fill);
 
-	// Clash binary path
-	let binary_path = app
-		.config
-		.clash_binary_path
-		.as_deref()
-		.unwrap_or("auto-detect")
-		.to_string();
-	column = column.push(
-		cosmic::widget::settings::section().add(
-			cosmic::widget::settings::item::builder(fl!("clash-binary"))
-				.description(binary_path)
-				.control(
-					widget::button::text(fl!("edit"))
-						.on_press(Message::EditSetting(SettingField::BinaryPath)),
-				),
-		),
-	);
+	// Application Settings Card
+	let app_card = widget::container(
+		widget::column::with_capacity(3)
+			.push(
+				widget::row::with_capacity(2)
+					.push(widget::icon::from_name("settings").size(24))
+					.push(widget::text::title3("Application Settings"))
+					.spacing(space_s)
+					.align_y(Alignment::Center)
+			)
+			.push(create_setting_row(
+				"Clash Binary Path",
+				app.config.clash_binary_path.as_deref().unwrap_or("Auto-detect"),
+				Message::EditSetting(SettingField::BinaryPath),
+				space_s,
+			))
+			.push(create_setting_row(
+				"Config Directory",
+				app.config.config_dir.as_deref().unwrap_or("Default directory"),
+				Message::EditSetting(SettingField::ConfigDir),
+				space_s,
+			))
+			.spacing(space_s + space_s / 2)
+	)
+	.padding(space_s * 2)
+	.class(cosmic::style::Container::Card);
 
-	// Config directory
-	let config_dir = app
-		.config
-		.config_dir
-		.as_deref()
-		.unwrap_or("default")
-		.to_string();
-	column = column.push(
-		cosmic::widget::settings::section().add(
-			cosmic::widget::settings::item::builder(fl!("config-directory"))
-				.description(config_dir)
-				.control(
-					widget::button::text(fl!("edit"))
-						.on_press(Message::EditSetting(SettingField::ConfigDir)),
-				),
-		),
-	);
+	main_column = main_column.push(app_card);
 
-	// API Port
-	let port_text = app.config.api_port.to_string();
-	column = column.push(
-		cosmic::widget::settings::section().add(
-			cosmic::widget::settings::item::builder(fl!("api-port"))
-				.description(port_text)
-				.control(
-					widget::button::text(fl!("edit"))
-						.on_press(Message::EditSetting(SettingField::ApiPort)),
-				),
-		),
-	);
+	// API Settings Card
+	let api_card = widget::container(
+		widget::column::with_capacity(3)
+			.push(
+				widget::row::with_capacity(2)
+					.push(widget::icon::from_name("api").size(24))
+					.push(widget::text::title3("API Settings"))
+					.spacing(space_s)
+					.align_y(Alignment::Center)
+			)
+			.push(create_setting_row(
+				"API Port",
+				&app.config.api_port.to_string(),
+				Message::EditSetting(SettingField::ApiPort),
+				space_s,
+			))
+			.push(create_setting_row(
+				"API Secret",
+				if app.config.api_secret.is_some() { "••••••••" } else { "Not set" },
+				Message::EditSetting(SettingField::ApiSecret),
+				space_s,
+			))
+			.spacing(space_s + space_s / 2)
+	)
+	.padding(space_s * 2)
+	.class(cosmic::style::Container::Card);
 
-	// API Secret
-	let secret_display = app
-		.config
-		.api_secret
-		.as_ref()
-		.map(|_| "********".to_string())
-		.unwrap_or_else(|| fl!("none").to_string());
-	column = column.push(
-		cosmic::widget::settings::section().add(
-			cosmic::widget::settings::item::builder(fl!("api-secret"))
-				.description(secret_display)
-				.control(
-					widget::button::text(fl!("edit"))
-						.on_press(Message::EditSetting(SettingField::ApiSecret)),
-				),
-		),
-	);
+	main_column = main_column.push(api_card);
 
-	// Inline edit area
+	// Inline edit area (if editing)
 	if let Some(field) = &app.editing_setting {
-		column = column.push(
-			widget::container(view_setting_editor(app, space_s, field))
-				.padding(space_s)
-				.class(cosmic::style::Container::Card)
-		);
+		let edit_card = widget::container(
+			view_setting_editor(app, space_s, field)
+		)
+		.padding(space_s * 2)
+		.class(cosmic::style::Container::Card);
+		
+		main_column = main_column.push(edit_card);
 	}
 
-	column.into()
+	main_column.into()
+}
+
+fn create_setting_row(
+	label: &str,
+	value: &str,
+	action: Message,
+	space_s: u16,
+) -> Element<'static, Message> {
+	let label_text = label.to_string();
+	let value_text = value.to_string();
+	
+	widget::row::with_capacity(2)
+		.push(
+			widget::column::with_capacity(2)
+				.push(widget::text::body(label_text))
+				.push(widget::text::body(value_text))
+				.spacing(space_s / 2)
+				.width(Length::Fill)
+		)
+		.push(
+			widget::button::text("EDIT")
+				.on_press(action)
+				.padding([4, 12])
+		)
+		.spacing(space_s)
+		.width(Length::Fill)
+		.align_y(Alignment::Center)
+		.into()
 }
 
 fn view_setting_editor<'a>(
@@ -102,25 +123,42 @@ fn view_setting_editor<'a>(
 	space_s: u16,
 	field: &'a SettingField,
 ) -> Element<'a, Message> {
-	let placeholder = match field {
-		SettingField::BinaryPath => fl!("binary-path-placeholder"),
-		SettingField::ConfigDir => fl!("config-dir-placeholder"),
-		SettingField::ApiPort => fl!("api-port-placeholder"),
-		SettingField::ApiSecret => fl!("api-secret-placeholder"),
+	let (title, placeholder) = match field {
+		SettingField::BinaryPath => ("Edit Binary Path", fl!("binary-path-placeholder")),
+		SettingField::ConfigDir => ("Edit Config Directory", fl!("config-dir-placeholder")),
+		SettingField::ApiPort => ("Edit API Port", fl!("api-port-placeholder")),
+		SettingField::ApiSecret => ("Edit API Secret", fl!("api-secret-placeholder")),
 	};
 
 	let input = widget::text_input(placeholder, &app.edit_value)
 		.on_input(Message::EditValueChanged)
-		.on_submit(|_| Message::SaveSetting);
+		.on_submit(|_| Message::SaveSetting)
+		.padding(space_s);
 
-	widget::column::with_capacity(2)
+	widget::column::with_capacity(3)
+		.push(
+			widget::row::with_capacity(2)
+				.push(widget::icon::from_name("edit").size(24))
+				.push(widget::text::title3(title))
+				.spacing(space_s)
+				.align_y(Alignment::Center)
+		)
 		.push(input)
 		.push(
 			widget::row::with_capacity(2)
-				.push(widget::button::text(fl!("save")).on_press(Message::SaveSetting))
-				.push(widget::button::text(fl!("cancel")).on_press(Message::CancelEdit))
-				.spacing(space_s),
+				.push(
+					widget::button::text("SAVE")
+						.on_press(Message::SaveSetting)
+						.padding([space_s, space_s * 2])
+				)
+				.push(
+					widget::button::text("CANCEL")
+						.on_press(Message::CancelEdit)
+						.padding([space_s, space_s * 2])
+				)
+				.spacing(space_s)
+				.width(Length::Fill)
 		)
-		.spacing(space_s)
+		.spacing(space_s * 2)
 		.into()
 }

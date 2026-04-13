@@ -13,76 +13,118 @@ pub fn view_home(
 		.align_y(Alignment::End)
 		.spacing(space_s);
 
-	// VPN Status with visual indicator
-	let vpn_status = if app.vpn_is_active { "Running" } else { "Stopped" };
-
-	let vpn_icon = if app.vpn_is_active { "network-wireless-symbolic" } else { "network-wireless-offline-symbolic" };
+	// VPN Status Card
+	let vpn_status_text = if app.vpn_is_active { "Running" } else { "Stopped" };
+	let vpn_icon = if app.vpn_is_active { 
+		"network-wireless"
+	} else { 
+		"network-wireless-off"
+	};
 	
-	let status_text = if app.vpn_is_active { "●" } else { "○" };
-	let status_indicator = widget::text::body(status_text);
-	
-	let status_row = widget::row::with_capacity(4)
-		.push(widget::icon::from_name(vpn_icon).size(24))
-		.push(widget::text::title3("VPN Status"))
-		.push(status_indicator)
-		.push(widget::text::body(vpn_status))
+	let status_header = widget::row::with_capacity(3)
+		.push(widget::icon::from_name(vpn_icon).size(32))
+		.push(widget::text::title2("VPN Status"))
+		.push(widget::text::body(if app.vpn_is_active { "●" } else { "○" }))
 		.spacing(space_s)
 		.align_y(Alignment::Center);
 	
-	let control_button = widget::button::text(if app.vpn_is_active { "Stop" } else { "Start" })
-		.on_press(Message::ToggleVPN)
-		.width(Length::Fixed(100.0));
-
-	// Show version info if available
-	let mut info_column = widget::column::with_capacity(2).spacing(space_s);
+	let status_details = widget::column::with_capacity(2)
+		.push(
+			widget::row::with_capacity(2)
+				.push(widget::text::body("Status:"))
+				.push(widget::text::body(vpn_status_text))
+				.spacing(space_s / 2)
+		)
+		.spacing(space_s / 2);
 	
-	if let Some(version) = &app.clash_version {
-		let ver_text = version.as_str();
-		info_column = info_column.push(
-			widget::row::with_capacity(2)
-				.push(widget::icon::from_name("dialog-information-symbolic").size(16))
-				.push(widget::text::body(format!("{}: {}", fl!("clash-version"), ver_text)))
-				.spacing(space_s / 2)
-				.align_y(Alignment::Center)
-		);
-	}
-
-	// Show traffic if available
-	if let Some(traffic) = &app.traffic {
-		let up_mb = traffic.up / 1_048_576;
-		let down_mb = traffic.down / 1_048_576;
-		
-		info_column = info_column.push(
-			widget::row::with_capacity(2)
-				.push(widget::icon::from_name("go-up-symbolic").size(16))
-				.push(widget::text::body(format!("Upload: {} MB", up_mb)))
-				.spacing(space_s / 2)
-				.align_y(Alignment::Center)
-		);
-		
-		info_column = info_column.push(
-			widget::row::with_capacity(2)
-				.push(widget::icon::from_name("go-down-symbolic").size(16))
-				.push(widget::text::body(format!("Download: {} MB", down_mb)))
-				.spacing(space_s / 2)
-				.align_y(Alignment::Center)
-		);
-	}
-
-	let main_card = widget::container(
-		widget::column::with_capacity(3)
-			.push(status_row)
-			.push(control_button)
-			.push(info_column)
-			.spacing(space_s)
+	// Control button
+	let control_button = widget::button::text(
+		if app.vpn_is_active { "STOP VPN" } else { "START VPN" }
 	)
-	.padding(space_s)
+	.on_press(Message::ToggleVPN)
+	.padding([space_s, space_s * 2])
+	.width(Length::Shrink);
+
+	// Stats Card
+	let mut stats_content = widget::column::with_capacity(3).spacing(space_s);
+	
+	// Version info
+	if let Some(version) = &app.clash_version {
+		stats_content = stats_content.push(
+			widget::row::with_capacity(3)
+				.push(widget::icon::from_name("info").size(20))
+				.push(widget::text::body("Version:"))
+				.push(widget::text::body(version))
+				.spacing(space_s / 2)
+				.align_y(Alignment::Center)
+		);
+	}
+
+	// Traffic stats
+	if let Some(traffic) = &app.traffic {
+		let up_mb = traffic.up as f64 / 1_048_576.0;
+		let down_mb = traffic.down as f64 / 1_048_576.0;
+		
+		stats_content = stats_content.push(
+			widget::row::with_capacity(3)
+				.push(widget::icon::from_name("arrow-upward").size(20))
+				.push(widget::text::body("Upload:"))
+				.push(widget::text::body(format!("{:.2} MB", up_mb)))
+				.spacing(space_s / 2)
+				.align_y(Alignment::Center)
+		);
+		
+		stats_content = stats_content.push(
+			widget::row::with_capacity(3)
+				.push(widget::icon::from_name("arrow-downward").size(20))
+				.push(widget::text::body("Download:"))
+				.push(widget::text::body(format!("{:.2} MB", down_mb)))
+				.spacing(space_s / 2)
+				.align_y(Alignment::Center)
+		);
+	}
+
+	let stats_card = if app.clash_version.is_some() || app.traffic.is_some() {
+		Some(
+			widget::container(
+				widget::column::with_capacity(2)
+					.push(widget::text::title3("Statistics"))
+					.push(stats_content)
+					.spacing(space_s)
+			)
+			.padding(space_s)
+			.class(cosmic::style::Container::Card)
+		)
+	} else {
+		None
+	};
+
+	// Main VPN card
+	let vpn_card = widget::container(
+		widget::column::with_capacity(3)
+			.push(status_header)
+			.push(status_details)
+			.push(
+				widget::row::with_capacity(1)
+					.push(control_button)
+					.width(Length::Fill)
+			)
+			.spacing(space_s * 2)
+	)
+	.padding(space_s * 2)
 	.class(cosmic::style::Container::Card);
 
-	widget::column::with_capacity(2)
+	// Main layout
+	let mut main_column = widget::column::with_capacity(3)
 		.push(header)
-		.push(main_card)
-		.spacing(space_s)
+		.push(vpn_card)
+		.spacing(space_s * 2);
+	
+	if let Some(stats_card) = stats_card {
+		main_column = main_column.push(stats_card);
+	}
+
+	main_column
 		.height(Length::Fill)
 		.into()
 }

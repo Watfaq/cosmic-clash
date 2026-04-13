@@ -13,88 +13,107 @@ pub fn view_profile(
 		.align_y(Alignment::End)
 		.spacing(space_s);
 
-	let mut column = widget::column::with_capacity(4)
+	let mut main_column = widget::column::with_capacity(4)
 		.push(header)
-		.spacing(space_s)
+		.spacing(space_s * 2)
 		.height(Length::Fill);
 
-	// Active profile display
-	let active = app.config.active_profile.as_deref().unwrap_or("no-profile");
+	// Active Profile Card
+	let active_profile = app.config.active_profile.as_deref().unwrap_or("No active profile");
 	
-	let active_profile_row = widget::row::with_capacity(3)
-		.push(widget::icon::from_name("emblem-ok-symbolic").size(16))
-		.push(widget::text::body(fl!("active-profile")))
-		.push(widget::text::body(active))
-		.spacing(space_s)
-		.align_y(Alignment::Center);
-	
-	column = column.push(
-		widget::container(active_profile_row)
-			.padding(space_s)
-			.class(cosmic::style::Container::Card)
-	);
-
-	// Reload button
-	column = column.push(
-		widget::button::text(fl!("reload-config"))
-			.on_press(Message::ReloadConfig)
-			.width(Length::Fill)
-	);
-
-	// Profile list
-	if app.profiles.is_empty() {
-		column = column.push(
-			widget::container(
-				widget::column::with_capacity(2)
-					.push(widget::icon::from_name("dialog-warning-symbolic").size(32))
-					.push(widget::text::body(fl!("no-profiles-found")))
+	let active_card = widget::container(
+		widget::column::with_capacity(3)
+			.push(
+				widget::row::with_capacity(3)
+					.push(widget::icon::from_name("check-circle").size(24))
+					.push(widget::text::title3("Active Profile"))
+					.push(
+						widget::container(
+							widget::text::caption("ACTIVE")
+						)
+						.padding([2, 8])
+					)
 					.spacing(space_s)
-					.align_x(Alignment::Center)
+					.align_y(Alignment::Center)
 			)
-			.align_x(Alignment::Center)
-			.align_y(Alignment::Center)
-			.padding(space_s * 2)
-		);
+			.push(
+				widget::container(
+					widget::text::title2(active_profile)
+				)
+				.padding([space_s, 0])
+			)
+			.push(
+				widget::row::with_capacity(1)
+					.push(
+						widget::button::text("RELOAD CONFIGS")
+							.on_press(Message::ReloadConfig)
+							.padding([space_s, space_s * 2])
+					)
+					.width(Length::Fill)
+			)
+			.spacing(space_s * 2)
+	)
+	.padding(space_s * 2)
+	.class(cosmic::style::Container::Card);
+
+	main_column = main_column.push(active_card);
+
+	// Profile List Card
+	let profile_list_card = if app.profiles.is_empty() {
+		// Empty state
+		widget::container(
+			widget::column::with_capacity(3)
+				.push(widget::icon::from_name("folder-open").size(48))
+				.push(widget::text::title3("No Profiles Found"))
+				.push(
+					widget::text::body("Add YAML configuration files to your config directory")
+				)
+				.spacing(space_s)
+		)
+		.padding(space_s * 3)
+		.class(cosmic::style::Container::Card)
 	} else {
-		let mut profiles_list = widget::column::with_capacity(app.profiles.len())
-			.spacing(space_s / 2);
+		// Profile list
+		let mut profiles_list = widget::column::with_capacity(app.profiles.len() + 1)
+			.spacing(space_s);
+		
+		profiles_list = profiles_list.push(
+			widget::text::title3("Available Profiles")
+		);
 		
 		for profile in &app.profiles {
-			let is_active = match &app.config.active_profile {
-				Some(active) => active == profile,
-				None => false,
-			};
-			let _icon_name = if is_active { "emblem-ok-symbolic" } else { "text-x-generic-symbolic" };
+			let is_active = app.config.active_profile.as_deref() == Some(profile.as_str());
 			
-
-			
-			let msg = Message::SelectProfile(profile.clone());
-			profiles_list = profiles_list.push(
-				widget::button::text(profile)
-					.on_press(msg)
+			let profile_item = widget::container(
+				widget::row::with_capacity(3)
+					.push(
+						widget::icon::from_name(
+							if is_active { "radio-button-checked" } else { "radio-button-unchecked" }
+						).size(20)
+					)
+					.push(
+						widget::text::body(profile)
+					)
+					.push(
+						widget::button::text("SELECT")
+							.on_press(Message::SelectProfile(profile.clone()))
+							.padding([4, 12])
+					)
+					.spacing(space_s)
+					.align_y(Alignment::Center)
 					.width(Length::Fill)
-					.padding(space_s)
-			);
+			)
+			.padding(space_s);
+			
+			profiles_list = profiles_list.push(profile_item);
 		}
 		
-		column = column.push(
-			widget::container(
-				widget::column::with_capacity(2)
-					.push(widget::text::heading(fl!("available-profiles")))
-					.push(profiles_list)
-					.spacing(space_s)
-			)
-			.padding(space_s)
+		widget::container(profiles_list)
+			.padding(space_s * 2)
 			.class(cosmic::style::Container::Card)
-		);
-	}
+	};
 
-	// Scan button
-	column = column.push(
-		widget::button::text(fl!("scan-profiles"))
-			.on_press(Message::Nop)
-			.width(Length::Fill)
-	);
+	main_column = main_column.push(profile_list_card);
 
-	column.into()
+	main_column.into()
 }
