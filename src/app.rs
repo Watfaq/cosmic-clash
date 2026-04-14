@@ -19,8 +19,10 @@ pub struct AppModel {
 	/// The currently active context page.
 	pub context_page: ContextPage,
 	/// Contains items assigned to the nav bar panel.
+	#[allow(dead_code)]
 	nav: nav_bar::Model,
 	/// Key bindings for the application's menu bar.
+	#[allow(dead_code)]
 	key_binds: HashMap<MenuKeyBind, MenuAction>,
 	/// Configuration data that persists between application runs.
 	pub config: Config,
@@ -178,19 +180,32 @@ impl Application for AppModel {
 						let api = ClashApi::new(self.config.api_url(), self.config.api_secret.clone());
 						self.api = Some(api.clone());
 						
-						// Start background tasks
+						// Fetch version after a short delay
 						let api_clone = api.clone();
-						tokio::spawn(async move {
+						return Task::perform(async move {
 							sleep(Duration::from_millis(500)).await;
-							let _ = api_clone.version().await;
-						});
+							match api_clone.version().await {
+								Ok(v) => Message::ClashVersionFetched(v.version.unwrap_or_default()),
+								Err(_) => Message::Nop,
+							}
+						}, |msg| cosmic::Action::App(msg));
 					}
 				}
 				Task::none()
 			}
 			Message::SelectProfile(profile) => {
-				self.config.active_profile = Some(profile);
+				self.config.active_profile = Some(profile.clone());
 				let _ = self.config.save();
+				// Also reload the selected profile in clash
+				if let Some(api) = &self.api {
+					let api = api.clone();
+					let config_dir = self.config.config_dir();
+					let path = config_dir.join(format!("{}.yaml", profile)).to_string_lossy().to_string();
+					return Task::perform(async move {
+						let _ = api.reload_config(&path).await;
+						Message::Nop
+					}, |msg| cosmic::Action::App(msg));
+				}
 				Task::none()
 			}
 			Message::ReloadConfig => {
@@ -225,12 +240,13 @@ impl Application for AppModel {
 			}
 			Message::UpdateTraffic => {
 				if let Some(api) = &self.api {
-					let api = api.clone();
-					// Background traffic update
 					let api_clone = api.clone();
-					tokio::spawn(async move {
-						let _ = api_clone.traffic().await;
-					});
+					return Task::perform(async move {
+						match api_clone.traffic().await {
+							Ok(traffic) => Message::TrafficUpdated(traffic),
+							Err(_) => Message::Nop,
+						}
+					}, |msg| cosmic::Action::App(msg));
 				}
 				Task::none()
 			}
@@ -295,7 +311,12 @@ impl Application for AppModel {
 	}
 
 	fn subscription(&self) -> Subscription<Self::Message> {
-		Subscription::none()
+		// Update traffic every 2 seconds when VPN is active
+		if self.vpn_is_active {
+			cosmic::iced::time::every(Duration::from_secs(2)).map(|_| Message::UpdateTraffic)
+		} else {
+			Subscription::none()
+		}
 	}
 }
 
@@ -308,7 +329,7 @@ impl AppModel {
 	/// Scan for config profiles.
 	pub fn scan_profiles(&mut self) -> Task<Message> {
 		let config_dir = self.config.config_dir();
-		tokio::spawn(async move {
+		Task::perform(async move {
 			let mut profiles = Vec::new();
 			if let Ok(entries) = std::fs::read_dir(config_dir) {
 				for entry in entries.flatten() {
@@ -320,9 +341,8 @@ impl AppModel {
 					}
 				}
 			}
-			// In a real app, we'd send Message::ProfileScanResult(profiles)
-		});
-		Task::none()
+			Message::ProfileScanResult(profiles)
+		}, |msg| cosmic::Action::App(msg))
 	}
 }
 

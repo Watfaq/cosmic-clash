@@ -5,9 +5,3 @@ pub mod settings;
 pub use home::view_home;
 pub use profile::view_profile;
 pub use settings::view_settings;
-
-pub enum Page {
-	PageHome,
-	PageProfile,
-	PageSettings,
-}

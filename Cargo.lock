@@ -7047,3 +7047,8 @@ dependencies = [
  "syn",
  "winnow 0.7.15",
 ]
+
+[[patch.unused]]
+name = "accesskit"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"

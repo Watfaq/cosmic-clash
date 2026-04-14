@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL3.0
 
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Config {
 	pub clash_binary_path: Option<String>,
 	pub config_dir: Option<String>,
@@ -42,14 +43,31 @@ impl Config {
 		format!("http://127.0.0.1:{}", self.api_port)
 	}
 
+	fn config_path() -> PathBuf {
+		dirs::config_dir()
+			.unwrap_or_else(|| PathBuf::from("."))
+			.join("cosmic-clash")
+			.join("config.json")
+	}
+
 	pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
-		// Simplified: just return Ok for now
+		let path = Self::config_path();
+		if let Some(parent) = path.parent() {
+			std::fs::create_dir_all(parent)?;
+		}
+		let json = serde_json::to_string_pretty(self)?;
+		std::fs::write(path, json)?;
 		Ok(())
 	}
 
 	pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
-		// Simplified: return default config
-		Ok(Self::default())
+		let path = Self::config_path();
+		if !path.exists() {
+			return Ok(Self::default());
+		}
+		let json = std::fs::read_to_string(path)?;
+		let config = serde_json::from_str(&json)?;
+		Ok(config)
 	}
 }
 
