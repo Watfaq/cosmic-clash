@@ -67,3 +67,7 @@ features = []
 # libcosmic = { path = "../libcosmic" }
 # cosmic-config = { path = "../libcosmic/cosmic-config" }
 # cosmic-theme = { path = "../libcosmic/cosmic-theme" }
+
+# Patch accesskit git dependency to use crates.io version to fix Windows build
+[patch."https://github.com/wash2/accesskit"]
+accesskit = { version = "0.24.0" }
