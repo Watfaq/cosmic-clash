@@ -1,0 +1,6 @@
+include = [
+   { path = "local.toml", optional = true },
+]
+
+[env]
+RUSTC_BOOTSTRAP = { value = "1" }

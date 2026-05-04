@@ -1,4 +1,3 @@
-.cargo/
 *.pdb
 **/*.rs.bk
 debug/
@@ -15,3 +14,5 @@ debian/*
 
 config.yaml
 assets/cache.db
+
+.cargo/local.toml

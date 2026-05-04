@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL3.0
 
+use std::collections::HashMap;
+
 use reqwest;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct ClashApi {
@@ -71,18 +72,12 @@ impl ClashApi {
 	}
 
 	pub async fn version(&self) -> eyre::Result<Version> {
-		let resp = self
-			.build_request(reqwest::Method::GET, "/version")
-			.send()
-			.await?;
+		let resp = self.build_request(reqwest::Method::GET, "/version").send().await?;
 		Ok(resp.json().await?)
 	}
 
 	pub async fn proxies(&self) -> eyre::Result<ProxiesResponse> {
-		let resp = self
-			.build_request(reqwest::Method::GET, "/proxies")
-			.send()
-			.await?;
+		let resp = self.build_request(reqwest::Method::GET, "/proxies").send().await?;
 		Ok(resp.json().await?)
 	}
 
@@ -101,10 +96,7 @@ impl ClashApi {
 	}
 
 	pub async fn traffic(&self) -> eyre::Result<Traffic> {
-		let resp = self
-			.build_request(reqwest::Method::GET, "/traffic")
-			.send()
-			.await?;
+		let resp = self.build_request(reqwest::Method::GET, "/traffic").send().await?;
 		let text = resp.text().await?;
 		// Clash traffic endpoint may return SSE stream; extract first data line
 		let json_line = text.lines().find(|l| !l.trim().is_empty()).unwrap_or("{}");

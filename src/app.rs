@@ -1,15 +1,11 @@
 // SPDX-License-Identifier: AGPL3.0
 
-use crate::api::ClashApi;
-use crate::config::Config;
-use crate::sidecar::SidecarManager;
-use cosmic::app::Task;
-use cosmic::iced::Subscription;
-use cosmic::widget::nav_bar;
-use cosmic::{Element, Application};
-use std::collections::HashMap;
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
+
+use cosmic::{Application, Element, app::Task, iced::Subscription, widget::nav_bar};
 use tokio::time::sleep;
+
+use crate::{api::ClashApi, config::Config, sidecar::SidecarManager};
 
 /// The main application model.
 pub struct AppModel {
@@ -137,10 +133,7 @@ impl Application for AppModel {
 		};
 
 		// Initial tasks
-		let task = Task::batch(vec![
-			app.update_title(),
-			app.scan_profiles(),
-		]);
+		let task = Task::batch(vec![app.update_title(), app.scan_profiles()]);
 
 		(app, task)
 	}
@@ -170,25 +163,28 @@ impl Application for AppModel {
 					let binary = self.config.clash_binary();
 					let work_dir = self.config.config_dir();
 					let config_path = work_dir.join("config.yaml");
-					
+
 					let mut sidecar = SidecarManager::new(binary, work_dir, config_path);
 					if let Ok(()) = sidecar.start() {
 						self.sidecar = Some(sidecar);
 						self.vpn_is_active = true;
-						
+
 						// Create API client
 						let api = ClashApi::new(self.config.api_url(), self.config.api_secret.clone());
 						self.api = Some(api.clone());
-						
+
 						// Fetch version after a short delay
 						let api_clone = api.clone();
-						return Task::perform(async move {
-							sleep(Duration::from_millis(500)).await;
-							match api_clone.version().await {
-								Ok(v) => Message::ClashVersionFetched(v.version.unwrap_or_default()),
-								Err(_) => Message::Nop,
-							}
-						}, |msg| cosmic::Action::App(msg));
+						return Task::perform(
+							async move {
+								sleep(Duration::from_millis(500)).await;
+								match api_clone.version().await {
+									Ok(v) => Message::ClashVersionFetched(v.version.unwrap_or_default()),
+									Err(_) => Message::Nop,
+								}
+							},
+							|msg| cosmic::Action::App(msg),
+						);
 					}
 				}
 				Task::none()
@@ -201,10 +197,13 @@ impl Application for AppModel {
 					let api = api.clone();
 					let config_dir = self.config.config_dir();
 					let path = config_dir.join(format!("{}.yaml", profile)).to_string_lossy().to_string();
-					return Task::perform(async move {
-						let _ = api.reload_config(&path).await;
-						Message::Nop
-					}, |msg| cosmic::Action::App(msg));
+					return Task::perform(
+						async move {
+							let _ = api.reload_config(&path).await;
+							Message::Nop
+						},
+						|msg| cosmic::Action::App(msg),
+					);
 				}
 				Task::none()
 			}
@@ -216,7 +215,7 @@ impl Application for AppModel {
 						.active_profile
 						.clone()
 						.unwrap_or_else(|| self.config.config_dir().join("config.yaml").to_string_lossy().to_string());
-					
+
 					// Background reload
 					let api_clone = api.clone();
 					let path_clone = path.clone();
@@ -241,12 +240,15 @@ impl Application for AppModel {
 			Message::UpdateTraffic => {
 				if let Some(api) = &self.api {
 					let api_clone = api.clone();
-					return Task::perform(async move {
-						match api_clone.traffic().await {
-							Ok(traffic) => Message::TrafficUpdated(traffic),
-							Err(_) => Message::Nop,
-						}
-					}, |msg| cosmic::Action::App(msg));
+					return Task::perform(
+						async move {
+							match api_clone.traffic().await {
+								Ok(traffic) => Message::TrafficUpdated(traffic),
+								Err(_) => Message::Nop,
+							}
+						},
+						|msg| cosmic::Action::App(msg),
+					);
 				}
 				Task::none()
 			}
@@ -302,7 +304,7 @@ impl Application for AppModel {
 
 	fn view(&self) -> Element<Self::Message> {
 		let space_s = 16;
-		
+
 		match self.context_page {
 			ContextPage::Home => crate::pages::home::view_home(self, space_s),
 			ContextPage::Profile => crate::pages::profile::view_profile(self, space_s),
@@ -325,24 +327,27 @@ impl AppModel {
 	pub fn update_title(&mut self) -> Task<Message> {
 		Task::none()
 	}
-	
+
 	/// Scan for config profiles.
 	pub fn scan_profiles(&mut self) -> Task<Message> {
 		let config_dir = self.config.config_dir();
-		Task::perform(async move {
-			let mut profiles = Vec::new();
-			if let Ok(entries) = std::fs::read_dir(config_dir) {
-				for entry in entries.flatten() {
-					let path = entry.path();
-					if path.extension().map_or(false, |ext| ext == "yaml" || ext == "yml") {
-						if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
-							profiles.push(name.to_string());
+		Task::perform(
+			async move {
+				let mut profiles = Vec::new();
+				if let Ok(entries) = std::fs::read_dir(config_dir) {
+					for entry in entries.flatten() {
+						let path = entry.path();
+						if path.extension().map_or(false, |ext| ext == "yaml" || ext == "yml") {
+							if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
+								profiles.push(name.to_string());
+							}
 						}
 					}
 				}
-			}
-			Message::ProfileScanResult(profiles)
-		}, |msg| cosmic::Action::App(msg))
+				Message::ProfileScanResult(profiles)
+			},
+			|msg| cosmic::Action::App(msg),
+		)
 	}
 }
 

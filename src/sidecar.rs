@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: AGPL3.0
 
-use std::path::PathBuf;
-use std::process::{Child, Command};
+use std::{
+	path::PathBuf,
+	process::{Child, Command},
+};
+
 use tracing;
 
 #[derive(Debug)]

@@ -2,15 +2,17 @@
 
 //! Provides localization support for this crate.
 
+use std::sync::LazyLock;
+
 use i18n_embed::{
 	DefaultLocalizer, LanguageLoader, Localizer,
 	fluent::{FluentLanguageLoader, fluent_language_loader},
 	unic_langid::LanguageIdentifier,
 };
 use rust_embed::RustEmbed;
-use std::sync::LazyLock;
 
-/// Applies the requested language(s) to requested translations from the `fl!()` macro.
+/// Applies the requested language(s) to requested translations from the `fl!()`
+/// macro.
 pub fn init(requested_languages: &[LanguageIdentifier]) {
 	if let Err(why) = localizer().select(requested_languages) {
 		eprintln!("error while loading fluent localizations: {why}");

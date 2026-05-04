@@ -12,14 +12,12 @@ default = ["cosmic"]
 
 # See https://github.com/pop-os/libcosmic/blob/master/Cargo.toml for available features.
 cosmic = [
-    "libcosmic/a11y", 
-    "libcosmic/about", 
-    "libcosmic/dbus-config", 
-    "libcosmic/multi-window", 
-    "libcosmic/single-instance", 
-    "libcosmic/tokio", 
-    "libcosmic/winit",
-    "libcosmic/wgpu"
+    #"libcosmic/a11y",
+    "libcosmic/about",
+    "libcosmic/dbus-config",
+    "libcosmic/multi-window",
+    "libcosmic/single-instance",
+    "libcosmic/tokio"
 ]
 
 [dependencies]
@@ -52,15 +50,18 @@ git = "https://github.com/pop-os/libcosmic.git"
 [target.'cfg(target_os = "windows")'.dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
 features = ["winit", "wgpu"]
+default-features = false
 
 [target.'cfg(target_os = "macos")'.dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
 features = ["winit", "wgpu"]
+default-features = false
 
 # Fallback for other platforms
 [target.'cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))'.dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
-features = []
+features = ["winit", "wgpu"]
+default-features = false
 
 # Uncomment to test a locally-cloned libcosmic
 # [patch.'https://github.com/pop-os/libcosmic']
@@ -69,5 +70,8 @@ features = []
 # cosmic-theme = { path = "../libcosmic/cosmic-theme" }
 
 # Patch accesskit git dependency to use crates.io version to fix Windows build
-[patch."https://github.com/wash2/accesskit"]
-accesskit = { version = "0.24.0" }
+# [patch."https://github.com/wash2/accesskit"]
+# accesskit = { branch = "cosmic-0.14-patch", git = "https://github.com/Itsusinn/accesskit.git" }
+# accesskit_consumer = { branch = "cosmic-0.14-patch", git = "https://github.com/Itsusinn/accesskit_consumer.git" }
+# accesskit_windows = { branch = "cosmic-0.14-patch", git = "https://github.com/Itsusinn/accesskit_consumer.git" }
+# accesskit_winit = { branch = "cosmic-0.14-patch", git = "https://github.com/Itsusinn/accesskit_consumer.git" }
