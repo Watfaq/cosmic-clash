@@ -2,8 +2,9 @@
 
 use cosmic::{
 	Element,
-	iced::{Alignment, Length},
-	widget,
+	cosmic_theme,
+	iced::{Alignment, Background, Border, Length},
+	theme, widget,
 };
 
 use crate::{
@@ -11,99 +12,175 @@ use crate::{
 	fl,
 };
 
-pub fn view_profile(app: &AppModel, space_s: u16) -> Element<'_, Message> {
-	let header = widget::row::with_capacity(2)
-		.push(widget::text::title1(fl!("profile")))
-		.align_y(Alignment::End)
-		.spacing(space_s);
+pub fn view_profile(app: &AppModel, _space_s: u16) -> Element<'_, Message> {
+	let cosmic_theme::Spacing {
+		space_xxs,
+		space_xs,
+		space_s,
+		space_m,
+		space_l,
+		..
+	} = theme::active().cosmic().spacing;
 
-	let mut main_column = widget::column::with_capacity(4)
-		.push(header)
-		.spacing(space_s * 2)
-		.height(Length::Fill);
-
-	// Active Profile Card
-	let active_profile = app.config.active_profile.as_deref().unwrap_or("No active profile");
-
-	let active_card = widget::container(
-		widget::column::with_capacity(3)
-			.push(
-				widget::row::with_capacity(3)
-					.push(widget::icon::from_name("check-circle").size(24))
-					.push(widget::text::title3("Active Profile"))
-					.push(widget::container(widget::text::caption("ACTIVE")).padding([2, 8]))
-					.spacing(space_s)
-					.align_y(Alignment::Center),
-			)
-			.push(widget::container(widget::text::title2(active_profile)).padding([space_s, 0]))
-			.push(
-				widget::row::with_capacity(1)
-					.push(
-						widget::button::text("RELOAD CONFIGS")
-							.on_press(Message::ReloadConfig)
-							.padding([space_s, space_s * 2]),
-					)
-					.width(Length::Fill),
-			)
-			.spacing(space_s * 2),
-	)
-	.padding(space_s * 2)
-	.class(cosmic::style::Container::Card);
-
-	main_column = main_column.push(active_card);
-
-	// Profile List Card
-	let profile_list_card = if app.profiles.is_empty() {
-		// Empty state
-		widget::container(
-			widget::column::with_capacity(3)
-				.push(widget::icon::from_name("folder-open").size(48))
-				.push(widget::text::title3("No Profiles Found"))
-				.push(widget::text::body("Add YAML configuration files to your config directory"))
-				.spacing(space_s),
+	let header = widget::row::with_capacity(3)
+		.push(
+			widget::column::with_capacity(2)
+				.push(widget::text::title2(fl!("profile")))
+				.spacing(space_xxs / 2),
 		)
-		.padding(space_s * 3)
-		.class(cosmic::style::Container::Card)
+		.push(widget::space::horizontal().width(Length::Fill))
+		.push(widget::button::standard(fl!("reload-config")).on_press(Message::ReloadConfig))
+		.align_y(Alignment::Center)
+		.spacing(space_s)
+		.width(Length::Fill);
+
+	let active_card = active_profile_card(app, space_xxs, space_xs, space_s, space_l);
+
+	let mut layout = widget::column::with_capacity(3)
+		.push(header)
+		.push(active_card)
+		.spacing(space_m)
+		.width(Length::Fill);
+
+	if app.profiles.is_empty() {
+		layout = layout.push(empty_profiles(space_s, space_m, space_l));
 	} else {
-		// Profile list
-		let mut profiles_list = widget::column::with_capacity(app.profiles.len() + 1).spacing(space_s);
+		layout = layout.push(profile_list(app, space_xxs, space_xs, space_s, space_l));
+	}
 
-		profiles_list = profiles_list.push(widget::text::title3("Available Profiles"));
+	layout.into()
+}
 
-		for profile in &app.profiles {
-			let is_active = app.config.active_profile.as_deref() == Some(profile.as_str());
+fn active_profile_card(
+	app: &AppModel,
+	_space_xxs: u16,
+	_space_xs: u16,
+	space_s: u16,
+	space_l: u16,
+) -> Element<'_, Message> {
+	let active = app.config.active_profile.as_deref();
+	let label = active
+		.map(|s| s.to_string())
+		.unwrap_or_else(|| fl!("no-profile"));
 
-			let profile_item = widget::container(
-				widget::row::with_capacity(3)
-					.push(
-						widget::icon::from_name(if is_active {
-							"radio-button-checked"
-						} else {
-							"radio-button-unchecked"
-						})
-						.size(20),
-					)
-					.push(widget::text::body(profile))
-					.push(
-						widget::button::text("SELECT")
-							.on_press(Message::SelectProfile(profile.clone()))
-							.padding([4, 12]),
-					)
-					.spacing(space_s)
-					.align_y(Alignment::Center)
-					.width(Length::Fill),
-			)
-			.padding(space_s);
-
-			profiles_list = profiles_list.push(profile_item);
-		}
-
-		widget::container(profiles_list)
-			.padding(space_s * 2)
-			.class(cosmic::style::Container::Card)
+	let icon_name = if active.is_some() {
+		"emblem-default-symbolic"
+	} else {
+		"dialog-question-symbolic"
 	};
 
-	main_column = main_column.push(profile_list_card);
+	let icon_disc = widget::container(widget::icon::from_name(icon_name).size(28))
+		.padding(space_s)
+		.class(theme::Container::custom(move |t| {
+			let cosmic = t.cosmic();
+			let bg = cosmic.accent_color();
+			widget::container::Style {
+				background: Some(Background::Color(bg.into())),
+				icon_color: Some(cosmic.on_accent_color().into()),
+				text_color: Some(cosmic.on_accent_color().into()),
+				border: Border { radius: 32.0.into(), ..Default::default() },
+				..Default::default()
+			}
+		}));
 
-	main_column.into()
+	let text_col = widget::column::with_capacity(2)
+		.push(widget::text::caption(fl!("active-profile")))
+		.push(widget::text::title3(label))
+		.spacing(2);
+
+	widget::container(
+		widget::row::with_capacity(2)
+			.push(icon_disc)
+			.push(text_col)
+			.spacing(space_s)
+			.align_y(Alignment::Center)
+			.width(Length::Fill),
+	)
+	.padding(space_l)
+	.width(Length::Fill)
+	.class(theme::Container::Card)
+	.into()
+}
+
+fn empty_profiles(space_s: u16, space_m: u16, space_l: u16) -> Element<'static, Message> {
+	let icon = widget::container(widget::icon::from_name("folder-symbolic").size(48))
+		.padding(space_m)
+		.class(theme::Container::custom(|t| {
+			let cosmic = t.cosmic();
+			widget::container::Style {
+				background: Some(Background::Color(cosmic.bg_component_color().into())),
+				icon_color: Some(cosmic.on_bg_component_color().into()),
+				border: Border { radius: 64.0.into(), ..Default::default() },
+				..Default::default()
+			}
+		}));
+
+	let column = widget::column::with_capacity(4)
+		.align_x(Alignment::Center)
+		.spacing(space_s)
+		.width(Length::Fill)
+		.push(icon)
+		.push(widget::text::title4(fl!("no-profiles-found")))
+		.push(widget::text::body(fl!("no-profiles-description")));
+
+	widget::container(column)
+		.padding(space_l + space_m)
+		.width(Length::Fill)
+		.class(theme::Container::Card)
+		.into()
+}
+
+fn profile_list<'a>(
+	app: &'a AppModel,
+	_space_xxs: u16,
+	_space_xs: u16,
+	space_s: u16,
+	space_l: u16,
+) -> Element<'a, Message> {
+	let header = widget::row::with_capacity(3)
+		.push(widget::icon::from_name("folder-open-symbolic").size(20))
+		.push(widget::text::heading(fl!("available-profiles")))
+		.push(widget::space::horizontal().width(Length::Fill))
+		.push(widget::text::caption(format!("{}", app.profiles.len())))
+		.spacing(space_s)
+		.align_y(Alignment::Center)
+		.width(Length::Fill);
+
+	let mut section = widget::settings::section();
+
+	for profile in &app.profiles {
+		let is_active = app.config.active_profile.as_deref() == Some(profile.as_str());
+
+		let indicator = widget::icon::from_name(if is_active {
+			"emblem-default-symbolic"
+		} else {
+			"folder-symbolic"
+		})
+		.size(20);
+
+		let item = widget::settings::item::builder(profile.clone()).icon(indicator);
+
+		let row = if is_active {
+			item.control(widget::text::caption(fl!("selected")))
+		} else {
+			item.control(
+				widget::button::text(fl!("select"))
+					.on_press(Message::SelectProfile(profile.clone())),
+			)
+		};
+
+		section = section.add(row);
+	}
+
+	widget::container(
+		widget::column::with_capacity(2)
+			.push(header)
+			.push(Element::from(section))
+			.spacing(space_s)
+			.width(Length::Fill),
+	)
+	.padding(space_l)
+	.width(Length::Fill)
+	.class(theme::Container::Card)
+	.into()
 }

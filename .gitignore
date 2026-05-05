@@ -16,3 +16,5 @@ config.yaml
 assets/cache.db
 
 .cargo/local.toml
+
+cosmic-player

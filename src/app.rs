@@ -2,10 +2,14 @@
 
 use std::{collections::HashMap, time::Duration};
 
-use cosmic::{Application, Element, app::Task, iced::Subscription, widget::nav_bar};
+use cosmic::{
+	Application, Element, app::Task,
+	iced::{Length, Subscription},
+	widget, widget::nav_bar, theme,
+};
 use tokio::time::sleep;
 
-use crate::{api::ClashApi, config::Config, sidecar::SidecarManager};
+use crate::{api::ClashApi, config::Config, fl, sidecar::SidecarManager};
 
 /// The main application model.
 pub struct AppModel {
@@ -15,8 +19,7 @@ pub struct AppModel {
 	/// The currently active context page.
 	pub context_page: ContextPage,
 	/// Contains items assigned to the nav bar panel.
-	#[allow(dead_code)]
-	nav: nav_bar::Model,
+	pub nav: nav_bar::Model,
 	/// Key bindings for the application's menu bar.
 	#[allow(dead_code)]
 	key_binds: HashMap<MenuKeyBind, MenuAction>,
@@ -60,8 +63,6 @@ pub enum SettingField {
 /// Messages emitted by the application and its widgets.
 #[derive(Debug, Clone)]
 pub enum Message {
-	ToggleContextPage(ContextPage),
-	LaunchUrl(String),
 	ToggleVPN,
 	SelectProfile(String),
 	ReloadConfig,
@@ -109,6 +110,9 @@ impl Application for AppModel {
 	}
 
 	fn init(core: cosmic::app::Core, _flags: Self::Flags) -> (Self, Task<Self::Message>) {
+		let mut core = core;
+		core.window.content_container = false;
+
 		let config = Config::load().unwrap_or_default();
 		let sidecar = Some(SidecarManager::new(
 			config.clash_binary(),
@@ -116,10 +120,22 @@ impl Application for AppModel {
 			config.config_dir().join("config.yaml"),
 		));
 
+		let mut nav = nav_bar::Model::default();
+		nav.insert()
+			.icon(widget::icon::from_name("user-home-symbolic"))
+			.text(fl!("home"))
+			.activate();
+		nav.insert()
+			.icon(widget::icon::from_name("folder-open-symbolic"))
+			.text(fl!("profile"));
+		nav.insert()
+			.icon(widget::icon::from_name("preferences-system-symbolic"))
+			.text(fl!("settings"));
+
 		let mut app = Self {
 			core,
 			context_page: ContextPage::Home,
-			nav: nav_bar::Model::default(),
+			nav,
 			key_binds: HashMap::new(),
 			config,
 			vpn_is_active: false,
@@ -140,14 +156,6 @@ impl Application for AppModel {
 
 	fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
 		match message {
-			Message::ToggleContextPage(page) => {
-				self.context_page = page;
-				self.update_title()
-			}
-			Message::LaunchUrl(url) => {
-				let _ = open::that_detached(&url);
-				Task::none()
-			}
 			Message::ToggleVPN => {
 				if self.vpn_is_active {
 					// Stop VPN
@@ -302,14 +310,46 @@ impl Application for AppModel {
 		}
 	}
 
-	fn view(&self) -> Element<Self::Message> {
-		let space_s = 16;
+	fn nav_model(&self) -> Option<&nav_bar::Model> {
+		Some(&self.nav)
+	}
 
-		match self.context_page {
+	fn on_nav_select(&mut self, id: nav_bar::Id) -> Task<Self::Message> {
+		self.nav.activate(id);
+		self.context_page = match self.nav.position(id) {
+			Some(0) => ContextPage::Home,
+			Some(1) => ContextPage::Profile,
+			Some(2) => ContextPage::Settings,
+			_ => return Task::none(),
+		};
+		self.update_title()
+	}
+
+	fn style(&self) -> Option<cosmic::iced::core::theme::Style> {
+		let theme = self.core.system_theme();
+		Some(cosmic::iced::core::theme::Style {
+			background_color: theme.cosmic().bg_color().into(),
+			icon_color: theme.cosmic().on_bg_color().into(),
+			text_color: theme.cosmic().on_bg_color().into(),
+		})
+	}
+
+	fn view(&self) -> Element<'_, Self::Message> {
+		let spacing = theme::active().cosmic().spacing;
+		let space_s = spacing.space_s;
+
+		let content: Element<'_, Self::Message> = match self.context_page {
 			ContextPage::Home => crate::pages::home::view_home(self, space_s),
 			ContextPage::Profile => crate::pages::profile::view_profile(self, space_s),
 			ContextPage::Settings => crate::pages::settings::view_settings(self, space_s),
-		}
+		};
+
+		let content = widget::container(content)
+			.padding(space_s)
+			.width(Length::Fill)
+			.height(Length::Fill);
+
+		widget::scrollable(content).into()
 	}
 
 	fn subscription(&self) -> Subscription<Self::Message> {

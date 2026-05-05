@@ -14,7 +14,7 @@ default = ["cosmic"]
 cosmic = [
     #"libcosmic/a11y",
     "libcosmic/about",
-    "libcosmic/dbus-config",
+    #"libcosmic/dbus-config",
     "libcosmic/multi-window",
     "libcosmic/single-instance",
     "libcosmic/tokio"
